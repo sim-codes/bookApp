@@ -1,4 +1,11 @@
+import { ConfirmationDialog } from '@/components/reader/ConfirmationDialog';
+import { JumpToPageModal } from '@/components/reader/JumpToPageModal';
+import { PdfNavigation } from '@/components/reader/PdfNavigation';
+import { ReaderHeader } from '@/components/reader/ReaderHeader';
+import { Toast } from '@/components/reader/Toast';
+import { TxtNavigation } from '@/components/reader/TxtNavigation';
 import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { booksStorage } from '@/services';
 import { useBooksStore, useReadingStore } from '@/stores';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -6,7 +13,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Modal,
     ScrollView,
     StyleSheet,
     Text,
@@ -15,8 +21,10 @@ import {
 } from 'react-native';
 import PdfReader from 'react-native-pdf';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ReadiumView } from 'react-native-readium';
+import type { ReadiumViewRef, Locator, PublicationReadyEvent } from 'react-native-readium';
 
-type FileType = 'txt' | 'pdf' | 'unknown';
+type FileType = 'txt' | 'pdf' | 'epub' | 'unknown';
 
 interface ToastConfig {
     visible: boolean;
@@ -33,11 +41,13 @@ export default function ReaderScreen() {
     const [pages, setPages] = useState<string[]>([]);
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [pageTransitioning, setPageTransitioning] = useState(false);
     const [isReading, setIsReading] = useState(false);
     const [fileType, setFileType] = useState<FileType>('unknown');
     const [pdfPageCount, setPdfPageCount] = useState(0);
     const [pdfUri, setPdfUri] = useState<string>('');
-    const pdfReaderRef = useRef(null);
+    const [bookTitle, setBookTitle] = useState('');
+    const [isPdfHorizontal, setIsPdfHorizontal] = useState(false);
     const [toast, setToast] = useState<ToastConfig>({
         visible: false,
         message: '',
@@ -45,6 +55,21 @@ export default function ReaderScreen() {
     });
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [confirmAction, setConfirmAction] = useState<() => void>(() => { });
+    const [showJumpToPageModal, setShowJumpToPageModal] = useState(false);
+
+    // Refs for PDF management — imperative control, no prop feedback loop
+    const pdfReaderRef = useRef<any>(null);
+    const navigationDebounceRef = useRef<number | null>(null);
+    const pdfPageChangeDebounceRef = useRef<number | null>(null);
+    const lastPdfPageRef = useRef(0);
+    const savedInitialPageRef = useRef(0); // Stores the saved page to jump to after PDF loads
+    const pdfLoadedRef = useRef(false); // Tracks whether PDF has completed initial load
+
+    const readiumRef = useRef<ReadiumViewRef>(null);
+    const [epubLocator, setEpubLocator] = useState<Locator | null>(null);
+    const [epubTotalPositions, setEpubTotalPositions] = useState(0);
+    const [epubCurrentPosition, setEpubCurrentPosition] = useState(0);
+    const epubLocatorDebounceRef = useRef<number | null>(null);
 
     const book = bookId ? books?.[bookId] : null;
 
@@ -52,15 +77,16 @@ export default function ReaderScreen() {
     const getFileType = (filePath: string): FileType => {
         const ext = filePath.toLowerCase().split('.').pop() || '';
         if (ext === 'pdf') return 'pdf';
+        if (ext === 'epub') return 'epub';
         if (ext === 'txt') return 'txt';
         return 'unknown';
     };
 
-    // Show toast notification
+    // Show toast notification — uses functional update to avoid stale closure
     const showToast = (message: string, type: ToastConfig['type'] = 'info') => {
         setToast({ visible: true, message, type });
         setTimeout(() => {
-            setToast({ ...toast, visible: false });
+            setToast(prev => ({ ...prev, visible: false }));
         }, 3000);
     };
 
@@ -73,35 +99,63 @@ export default function ReaderScreen() {
     // Load book content on mount
     useEffect(() => {
         const loadBookContent = async () => {
-            if (!book?.fileUri) {
-                showToast('Book file not found', 'error');
-                setTimeout(() => router.back(), 2000);
-                return;
-            }
-
             try {
                 setLoading(true);
-                const type = getFileType(book.fileUri);
+
+                let currentBook = book;
+                if (!currentBook && bookId) {
+                    console.log('Book not in store, loading from storage:', bookId);
+                    currentBook = await booksStorage.get(bookId);
+                }
+
+                if (!currentBook?.fileUri) {
+                    console.log('Book or fileUri not found:', { currentBook, bookId });
+                    showToast('Book file not found', 'error');
+                    setTimeout(() => router.back(), 2000);
+                    return;
+                }
+
+                setBookTitle(currentBook.title || 'Book');
+
+                const type = getFileType(currentBook.fileUri);
                 setFileType(type);
 
                 if (type === 'txt') {
-                    const content = await FileSystem.readAsStringAsync(book.fileUri);
+                    console.log('Reading TXT file...');
+                    const content = await FileSystem.readAsStringAsync(currentBook.fileUri);
                     const bookPages = splitIntoPages(content);
                     setPages(bookPages);
 
-                    const lastPage = book.currentPage || 0;
+                    const lastPage = currentBook.currentPage || 0;
                     setCurrentPageIndex(Math.min(lastPage, bookPages.length - 1));
+                    console.log('TXT file loaded, pages:', bookPages.length);
                 } else if (type === 'pdf') {
-                    // For PDF, just set the URI for react-native-pdf to handle
-                    setPdfUri(book.fileUri);
-                    setCurrentPageIndex(book.currentPage || 0);
-                } else {
+                    const savedPage = currentBook.currentPage || 0;
+                    savedInitialPageRef.current = savedPage; // Store for post-load jump
+                    lastPdfPageRef.current = savedPage;
+                    setCurrentPageIndex(savedPage);
+                    setPdfUri(currentBook.fileUri);
+                    // NOTE: No pdfPageToDisplay state — page prop is intentionally absent
+                    // from PdfReader. Initial page restore happens via ref in onLoadComplete.
+                } else if (type === 'epub') {
+                    const savedLocatorStr = currentBook.epubLocator;
+                    if (savedLocatorStr) {
+                        try {
+                            setEpubLocator(JSON.parse(savedLocatorStr));
+                        } catch {
+                            setEpubLocator(null);
+                        }
+                    }
+                    setPdfUri(currentBook.fileUri); // reuse pdfUri state for the file path
+                }
+                else {
+                    console.log('Unsupported file type:', type);
                     showToast('Unsupported file format', 'error');
                     setPages(['Unsupported file format']);
                 }
             } catch (error) {
                 console.error('Error reading book:', error);
-                showToast('Failed to load book content', 'error');
+                showToast(`Failed to load book: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
                 setPages(['Error loading content']);
             } finally {
                 setLoading(false);
@@ -109,18 +163,33 @@ export default function ReaderScreen() {
         };
 
         loadBookContent();
-    }, [book?.fileUri, bookId]);
+    }, [bookId, book]);
 
-    // Split content into pages
+    // Cleanup debounce timeouts on unmount
+    useEffect(() => {
+        return () => {
+            if (navigationDebounceRef.current) clearTimeout(navigationDebounceRef.current);
+            if (pdfPageChangeDebounceRef.current) clearTimeout(pdfPageChangeDebounceRef.current);
+        };
+    }, []);
+
+    // Auto-start reading session when content loads
+    useEffect(() => {
+        if (fileType !== 'unknown' && !loading && !isReading && bookId) {
+            handleStartReading();
+        }
+    }, [fileType, loading, isReading, bookId]);
+
+    // Split TXT content into pages
     const splitIntoPages = (content: string): string[] => {
-        const charsPerPage = 2000;
+        const charsPerPage = 1500;
         const pageArray: string[] = [];
 
         for (let i = 0; i < content.length; i += charsPerPage) {
             pageArray.push(content.substring(i, i + charsPerPage));
         }
 
-        return pageArray.length > 0 ? pageArray : [content];
+        return pageArray.length > 0 ? pageArray : [''];
     };
 
     const handleStartReading = () => {
@@ -134,13 +203,21 @@ export default function ReaderScreen() {
             await endSession(currentPageIndex);
             setIsReading(false);
 
-            if (book && bookId) {
-                const isCompleted = currentPageIndex >= pages.length - 1;
-                await updateBook(bookId, {
-                    currentPage: currentPageIndex,
-                    totalPages: pages.length,
-                    status: isCompleted ? 'completed' : 'reading',
-                });
+            if (bookId) {
+                try {
+                    const isCompleted = fileType === 'pdf'
+                        ? currentPageIndex >= pdfPageCount - 1
+                        : currentPageIndex >= pages.length - 1;
+
+                    await updateBook(bookId, {
+                        currentPage: fileType === 'epub' ? 0 : currentPageIndex,
+                        epubLocator: fileType === 'epub' ? JSON.stringify(epubLocator) : undefined,
+                        totalPages: fileType === 'pdf' ? pdfPageCount : pages.length,
+                        status: isCompleted ? 'completed' : 'reading',
+                    });
+                } catch (error) {
+                    console.error('Error updating book on session end:', error);
+                }
             }
             showToast('Reading session saved', 'success');
         } catch (error) {
@@ -149,34 +226,101 @@ export default function ReaderScreen() {
         }
     };
 
-    const handlePreviousPage = async () => {
-        if (currentPageIndex > 0) {
-            const newIndex = currentPageIndex - 1;
-            setCurrentPageIndex(newIndex);
+    const handleEndReadingAndClose = async () => {
+        await handleEndReading();
+        setTimeout(() => {
+            router.back();
+        }, 500);
+    };
 
-            if (book && bookId) {
-                await updateBook(bookId, {
-                    currentPage: newIndex,
-                    totalPages: pages.length,
-                });
-            }
+    const handlePreviousPage = async () => {
+        if (currentPageIndex > 0 && !pageTransitioning) {
+            if (navigationDebounceRef.current) clearTimeout(navigationDebounceRef.current);
+
+            setPageTransitioning(true);
+            const newIndex = currentPageIndex - 1;
+
+            navigationDebounceRef.current = setTimeout(async () => {
+                setCurrentPageIndex(newIndex);
+
+                if (bookId) {
+                    try {
+                        await updateBook(bookId, {
+                            currentPage: newIndex,
+                            totalPages: pages.length || 1,
+                        });
+                    } catch (error) {
+                        console.error('Error updating page:', error);
+                    }
+                }
+                setPageTransitioning(false);
+            }, 100);
+        }
+    };
+
+    // Debounced PDF page change handler — only updates header display and saves progress.
+    // Intentionally does NOT update any prop fed back to PdfReader (no feedback loop).
+    const handlePdfPageChange = (page: number) => {
+        // Guard: ignore initial onPageChanged fired before the session starts
+        if (!pdfLoadedRef.current) return;
+
+        if (pdfPageChangeDebounceRef.current) clearTimeout(pdfPageChangeDebounceRef.current);
+
+        const newPageIndex = page - 1;
+        const pageChange = Math.abs(newPageIndex - lastPdfPageRef.current);
+
+        if (pageChange > 0) {
+            lastPdfPageRef.current = newPageIndex;
+            setCurrentPageIndex(newPageIndex); // Header display only
+
+            pdfPageChangeDebounceRef.current = setTimeout(() => {
+                if (bookId) {
+                    updateBook(bookId, {
+                        currentPage: newPageIndex,
+                        totalPages: pdfPageCount || 1,
+                    }).catch((error) => {
+                        console.error('Error updating PDF page:', error);
+                    });
+                }
+            }, 300);
         }
     };
 
     const handleNextPage = async () => {
-        if (currentPageIndex < pages.length - 1) {
-            const newIndex = currentPageIndex + 1;
-            setCurrentPageIndex(newIndex);
+        if (currentPageIndex < pages.length - 1 && !pageTransitioning) {
+            if (navigationDebounceRef.current) clearTimeout(navigationDebounceRef.current);
 
-            if (book && bookId) {
-                const isCompleted = newIndex >= pages.length - 1;
-                await updateBook(bookId, {
-                    currentPage: newIndex,
-                    totalPages: pages.length,
-                    status: isCompleted ? 'completed' : 'reading',
-                });
-            }
+            setPageTransitioning(true);
+            const newIndex = currentPageIndex + 1;
+
+            navigationDebounceRef.current = setTimeout(async () => {
+                setCurrentPageIndex(newIndex);
+
+                if (bookId) {
+                    try {
+                        const isCompleted = newIndex >= pages.length - 1;
+                        await updateBook(bookId, {
+                            currentPage: newIndex,
+                            totalPages: pages.length,
+                            status: isCompleted ? 'completed' : 'reading',
+                        });
+                    } catch (error) {
+                        console.error('Error updating page:', error);
+                    }
+                }
+                setPageTransitioning(false);
+            }, 100);
         }
+    };
+
+    // Jump to a specific PDF page via ref — no state update that feeds back into PdfReader
+    const jumpToPdfPage = (pageNum: number) => {
+        if (pdfReaderRef.current?.setPage) {
+            pdfReaderRef.current.setPage(pageNum);
+        }
+        // Update header display and tracking ref only — not any prop on PdfReader
+        setCurrentPageIndex(pageNum - 1);
+        lastPdfPageRef.current = pageNum - 1;
     };
 
     const handleBackPress = () => {
@@ -202,15 +346,13 @@ export default function ReaderScreen() {
         );
     }
 
-    if (!book || pages.length === 0) {
+    if (!book || (pages.length === 0 && !pdfUri)) {
         return (
             <SafeAreaView style={styles.container}>
-                <View style={styles.header}>
+                <View style={{ paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.lightGray, flexDirection: 'row', alignItems: 'center' }}>
                     <TouchableOpacity onPress={handleBackPress}>
                         <MaterialIcons name="arrow-back" size={24} color={Colors.primary} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Reader</Text>
-                    <View style={{ width: 24 }} />
                 </View>
                 <View style={styles.content}>
                     <Text style={styles.errorText}>Unable to load book</Text>
@@ -219,27 +361,23 @@ export default function ReaderScreen() {
         );
     }
 
-    const progress = ((currentPageIndex + 1) / pages.length) * 100;
-    const currentPage = pages[currentPageIndex];
+    const progress = fileType === 'pdf'
+        ? pdfPageCount > 0 ? ((currentPageIndex + 1) / pdfPageCount) * 100 : 0
+        : pages.length > 0 ? ((currentPageIndex + 1) / pages.length) * 100 : 0;
+
+    const currentPage = pages[currentPageIndex] || '';
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={handleBackPress}>
-                    <MaterialIcons name="arrow-back" size={24} color={Colors.primary} />
-                </TouchableOpacity>
-                <View style={styles.headerContent}>
-                    <Text style={styles.headerTitle} numberOfLines={1}>
-                        {book.title}
-                    </Text>
-                    <Text style={styles.headerSubtitle}>
-                        {fileType === 'pdf' ? 'PDF' : 'Page'} {currentPageIndex + 1} of{' '}
-                        {fileType === 'pdf' ? pdfPageCount : pages.length}
-                    </Text>
-                </View>
-                <View style={{ width: 24 }} />
-            </View>
+            <ReaderHeader
+                title={bookTitle || 'Book'}
+                currentPage={currentPageIndex + 1}
+                totalPages={fileType === 'pdf' ? pdfPageCount : pages.length}
+                epubCurrentPosition={fileType === 'epub' ? epubCurrentPosition : undefined}
+                epubTotalPositions={fileType === 'epub' ? epubTotalPositions : undefined}
+                fileType={(fileType === 'txt' ? 'txt' : 'pdf') as 'txt' | 'pdf' | 'epub'}
+                onBackPress={handleBackPress}
+            />
 
             {/* Progress Bar */}
             <View style={styles.progressBarContainer}>
@@ -247,52 +385,105 @@ export default function ReaderScreen() {
             </View>
 
             {/* Content Area */}
-            {fileType === 'txt' ? (
-                <ScrollView
-                    style={styles.contentArea}
-                    contentContainerStyle={styles.contentContainer}
-                    showsVerticalScrollIndicator={false}
-                >
-                    <Text style={styles.pageText}>{currentPage}</Text>
-                </ScrollView>
-            ) : fileType === 'pdf' ? (
-                <PdfReader
-                    ref={pdfReaderRef}
-                    source={{ uri: pdfUri }}
-                    onLoadComplete={(numberOfPages) => {
-                        setPdfPageCount(numberOfPages);
-                    }}
-                    page={currentPageIndex + 1}
-                    onPageChanged={(page) => {
-                        setCurrentPageIndex(page - 1);
-                    }}
-                    style={styles.pdfViewer}
-                    activityIndicator={<ActivityIndicator size="large" color={Colors.primary} />}
-                    onError={(error) => {
-                        console.error('PDF rendering error:', error);
-                        showToast('Error loading PDF', 'error');
-                    }}
-                    enablePaging={true}
-                    horizontal={false}
-                />
-            ) : (
-                <View style={styles.contentArea}>
-                    <View style={styles.placeholderContent}>
-                        <MaterialIcons name="error-outline" size={64} color={Colors.mediumGray} />
-                        <Text style={styles.placeholderText}>Unsupported Format</Text>
-                        <Text style={styles.placeholderSubtext}>
-                            This file format is not supported
+            <View style={styles.contentAreaWrapper}>
+                {fileType === 'txt' ? (
+                    <ScrollView
+                        style={styles.contentArea}
+                        contentContainerStyle={styles.contentContainer}
+                        showsVerticalScrollIndicator={false}
+                        key={`page-${currentPageIndex}`}
+                        scrollEventThrottle={16}
+                        scrollEnabled={!pageTransitioning}
+                    >
+                        <Text style={styles.pageText} key={`text-${currentPageIndex}`}>
+                            {currentPage || 'Page not found'}
                         </Text>
+                    </ScrollView>
+                ) : fileType === 'pdf' ? (
+                    <PdfReader
+                        ref={pdfReaderRef}
+                        source={{ uri: pdfUri, cache: true }}
+                        onLoadComplete={(numberOfPages) => {
+                            setPdfPageCount(numberOfPages);
+                            // Restore saved page position imperatively after PDF is ready.
+                            // Using a short delay to ensure the internal renderer is stable
+                            // before issuing the setPage command.
+                            const savedPage = savedInitialPageRef.current;
+                            if (savedPage > 0 && pdfReaderRef.current?.setPage) {
+                                setTimeout(() => {
+                                    pdfReaderRef.current?.setPage?.(savedPage + 1);
+                                    pdfLoadedRef.current = true; // Allow onPageChanged tracking now
+                                }, 300);
+                            } else {
+                                pdfLoadedRef.current = true;
+                            }
+                        }}
+                        // NO `page` prop — react-native-pdf owns scroll state internally.
+                        // Passing a controlled `page` prop that mirrors onPageChanged state
+                        // creates a feedback loop causing crashes and flashes on fast scroll.
+                        // All programmatic navigation uses pdfReaderRef.current.setPage() instead.
+                        onPageChanged={handlePdfPageChange}
+                        style={styles.pdfViewer}
+                        onError={(error) => {
+                            console.error('PDF rendering error:', error);
+                            showToast('Error loading PDF', 'error');
+                        }}
+                        enablePaging={true}
+                        horizontal={isPdfHorizontal}
+                    />
+                ) : fileType === 'epub' ? (
+                        <ReadiumView
+                            ref={readiumRef}
+                            file={{ url: pdfUri }}
+                            location={epubLocator}        // safe as initial prop — not a feedback loop
+                            onLocationChange={(locator) => {
+                                // Update display
+                                const pos = locator?.locations?.position ?? 0;
+                                setEpubCurrentPosition(pos);
+
+                                // Debounced save
+                                if (epubLocatorDebounceRef.current) {
+                                    clearTimeout(epubLocatorDebounceRef.current);
+                                }
+                                epubLocatorDebounceRef.current = setTimeout(() => {
+                                    if (bookId) {
+                                        updateBook(bookId, {
+                                            epubLocator: JSON.stringify(locator),
+                                        }).catch(console.error);
+                                    }
+                                }, 500);
+                            }}
+                            onPublicationReady={(event: PublicationReadyEvent) => {
+                                setEpubTotalPositions(event.positions?.length ?? 0);
+                            }}
+                            style={styles.pdfViewer} // same flex:1 style works fine
+                        />
+                    ) : (
+                    <View style={styles.contentArea}>
+                        <View style={styles.placeholderContent}>
+                            <MaterialIcons name="error-outline" size={64} color={Colors.mediumGray} />
+                            <Text style={styles.placeholderText}>Unsupported Format</Text>
+                            <Text style={styles.placeholderSubtext}>
+                                This file format is not supported
+                            </Text>
+                        </View>
                     </View>
-                </View>
-            )}
+                )}
+
+                {/* Loading Overlay — TXT transitions only */}
+                {pageTransitioning && fileType === 'txt' && (
+                    <View style={styles.loadingOverlay}>
+                        <ActivityIndicator size="large" color={Colors.primary} />
+                    </View>
+                )}
+            </View>
 
             {/* Navigation Footer */}
             <View style={styles.footer}>
                 {/* Reading Session Button */}
                 <TouchableOpacity
                     style={[styles.sessionButton, isReading && styles.sessionButtonActive]}
-                    onPress={isReading ? handleEndReading : handleStartReading}
+                    onPress={isReading ? handleEndReadingAndClose : handleStartReading}
                 >
                     <MaterialIcons
                         name={isReading ? 'stop-circle' : 'play-circle'}
@@ -304,111 +495,79 @@ export default function ReaderScreen() {
                     </Text>
                 </TouchableOpacity>
 
-                {/* Page Navigation */}
+                {/* TXT Page Navigation */}
                 {fileType === 'txt' && (
-                    <View style={styles.navigation}>
+                    <TxtNavigation
+                        currentPage={currentPageIndex}
+                        totalPages={pages.length}
+                        isTransitioning={pageTransitioning}
+                        onPreviousPage={handlePreviousPage}
+                        onNextPage={handleNextPage}
+                    />
+                )}
+
+                {/* PDF Navigation */}
+                {fileType === 'pdf' && (
+                    <PdfNavigation
+                        isHorizontal={isPdfHorizontal}
+                        onToggleOrientation={() => setIsPdfHorizontal(!isPdfHorizontal)}
+                        onJumpToPage={() => setShowJumpToPageModal(true)}
+                    />
+                )}
+
+                {fileType === 'epub' && (
+                    <View style={styles.pdfNavigation}>
                         <TouchableOpacity
-                            style={[
-                                styles.navButton,
-                                currentPageIndex === 0 && styles.navButtonDisabled,
-                            ]}
-                            onPress={handlePreviousPage}
-                            disabled={currentPageIndex === 0}
+                            style={[styles.navButton, styles.toggleButton]}
+                            onPress={() => readiumRef.current?.goBackward()}
                         >
-                            <MaterialIcons
-                                name="arrow-back-ios"
-                                size={20}
-                                color={
-                                    currentPageIndex === 0 ? Colors.mediumGray : Colors.primary
-                                }
-                            />
+                            <MaterialIcons name="arrow-back-ios" size={20} color={Colors.primary} />
                         </TouchableOpacity>
-
-                        <Text style={styles.pageIndicator}>
-                            {currentPageIndex + 1}/{pages.length}
-                        </Text>
-
                         <TouchableOpacity
-                            style={[
-                                styles.navButton,
-                                currentPageIndex === pages.length - 1 && styles.navButtonDisabled,
-                            ]}
-                            onPress={handleNextPage}
-                            disabled={currentPageIndex === pages.length - 1}
+                            style={[styles.navButton, styles.toggleButton]}
+                            onPress={() => readiumRef.current?.goForward()}
                         >
-                            <MaterialIcons
-                                name="arrow-forward-ios"
-                                size={20}
-                                color={
-                                    currentPageIndex === pages.length - 1
-                                        ? Colors.mediumGray
-                                        : Colors.primary
-                                }
-                            />
+                            <MaterialIcons name="arrow-forward-ios" size={20} color={Colors.primary} />
                         </TouchableOpacity>
                     </View>
                 )}
             </View>
 
             {/* Toast Notification */}
-            {toast.visible && (
-                <View
-                    style={[
-                        styles.toast,
-                        toast.type === 'error' && styles.toastError,
-                        toast.type === 'success' && styles.toastSuccess,
-                    ]}
-                >
-                    <MaterialIcons
-                        name={
-                            toast.type === 'error'
-                                ? 'error'
-                                : toast.type === 'success'
-                                    ? 'check-circle'
-                                    : 'info'
-                        }
-                        size={20}
-                        color={Colors.white}
-                    />
-                    <Text style={styles.toastText}>{toast.message}</Text>
-                </View>
-            )}
+            <Toast
+                visible={toast.visible}
+                message={toast.message}
+                type={toast.type}
+            />
 
             {/* Confirmation Dialog Modal */}
-            <Modal
-                transparent
-                animationType="fade"
+            <ConfirmationDialog
                 visible={showConfirmDialog}
-                onRequestClose={() => setShowConfirmDialog(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>End Reading?</Text>
-                        <Text style={styles.modalMessage}>
-                            Do you want to save your reading session?
-                        </Text>
+                title="End Reading?"
+                message="Do you want to save your reading session?"
+                onCancel={() => {
+                    setShowConfirmDialog(false);
+                    router.back();
+                }}
+                onConfirm={() => confirmAction()}
+                confirmText="Save"
+                cancelText="Discard"
+            />
 
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.modalButtonCancel]}
-                                onPress={() => {
-                                    setShowConfirmDialog(false);
-                                    router.back();
-                                }}
-                            >
-                                <Text style={styles.modalButtonCancelText}>Discard</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.modalButtonConfirm]}
-                                onPress={() => confirmAction()}
-                            >
-                                <Text style={styles.modalButtonText}>Save</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
+            {/* Jump to Page Modal */}
+            <JumpToPageModal
+                visible={showJumpToPageModal}
+                currentPage={currentPageIndex}
+                maxPage={pdfPageCount}
+                onClose={() => {
+                    setShowJumpToPageModal(false);
+                }}
+                onJump={(pageNum) => {
+                    jumpToPdfPage(pageNum);
+                    setShowJumpToPageModal(false);
+                    showToast(`Jumped to page ${pageNum}`, 'success');
+                }}
+            />
         </SafeAreaView>
     );
 }
@@ -429,28 +588,6 @@ const styles = StyleSheet.create({
         color: Colors.textLight,
         marginTop: Spacing.md,
     },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.lightGray,
-    },
-    headerContent: {
-        flex: 1,
-        alignItems: 'center',
-        gap: Spacing.xs,
-    },
-    headerTitle: {
-        ...TextStyles.h4,
-        color: Colors.textDark,
-    },
-    headerSubtitle: {
-        ...TextStyles.caption,
-        color: Colors.textLight,
-    },
     progressBarContainer: {
         height: 3,
         backgroundColor: Colors.lightGray,
@@ -461,6 +598,21 @@ const styles = StyleSheet.create({
     },
     contentArea: {
         flex: 1,
+    },
+    contentAreaWrapper: {
+        flex: 1,
+        position: 'relative',
+    },
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 100,
     },
     pdfViewer: {
         flex: 1,
@@ -524,103 +676,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#FF4444',
     },
     sessionButtonText: {
-        ...TextStyles.body,
-        color: Colors.white,
-        fontWeight: '600',
-    },
-    navigation: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: Spacing.md,
-    },
-    navButton: {
-        flex: 1,
-        paddingVertical: Spacing.md,
-        borderRadius: BorderRadius.md,
-        borderWidth: 2,
-        borderColor: Colors.primary,
-        alignItems: 'center',
-    },
-    navButtonDisabled: {
-        borderColor: Colors.lightGray,
-        opacity: 0.5,
-    },
-    pageIndicator: {
-        ...TextStyles.bodySmall,
-        color: Colors.textLight,
-        fontWeight: '600',
-        minWidth: 40,
-        textAlign: 'center',
-    },
-    toast: {
-        position: 'absolute',
-        bottom: 80,
-        alignSelf: 'center',
-        backgroundColor: Colors.primary,
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.md,
-        borderRadius: BorderRadius.full,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Spacing.md,
-    },
-    toastError: {
-        backgroundColor: '#FF4444',
-    },
-    toastSuccess: {
-        backgroundColor: '#4CAF50',
-    },
-    toastText: {
-        ...TextStyles.body,
-        color: Colors.white,
-        fontWeight: '600',
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modalContent: {
-        backgroundColor: Colors.white,
-        borderRadius: BorderRadius.lg,
-        padding: Spacing.xl,
-        width: '80%',
-        gap: Spacing.md,
-    },
-    modalTitle: {
-        ...TextStyles.h3,
-        color: Colors.textDark,
-    },
-    modalMessage: {
-        ...TextStyles.body,
-        color: Colors.textLight,
-    },
-    modalActions: {
-        flexDirection: 'row',
-        gap: Spacing.md,
-        marginTop: Spacing.md,
-    },
-    modalButton: {
-        flex: 1,
-        paddingVertical: Spacing.md,
-        borderRadius: BorderRadius.md,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    modalButtonCancel: {
-        backgroundColor: Colors.lightGray,
-    },
-    modalButtonCancelText: {
-        ...TextStyles.body,
-        color: Colors.textDark,
-        fontWeight: '600',
-    },
-    modalButtonConfirm: {
-        backgroundColor: Colors.primary,
-    },
-    modalButtonText: {
         ...TextStyles.body,
         color: Colors.white,
         fontWeight: '600',

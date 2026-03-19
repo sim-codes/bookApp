@@ -2,7 +2,12 @@ import { BorderRadius, Colors, Shadows, Spacing, TextStyles } from '@/constants'
 import { BookCardProps } from '@/types';
 import { toTitleCase } from '@/utils';
 import { useRef } from 'react';
-import { Animated, Image, PanResponder, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Image, PanResponder, StyleSheet, Text, View } from 'react-native';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const SWIPE_OUT_DURATION = 250;
+const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.3;
+const SWIPE_UP_THRESHOLD = 80;
 
 export function BookCard({
     title,
@@ -17,42 +22,67 @@ export function BookCard({
 }: BookCardProps) {
     const pan = useRef(new Animated.ValueXY()).current;
 
+    // Dynamic rotation: card tilts as it's dragged left/right
+    const dynamicRotation = pan.x.interpolate({
+        inputRange: [-SCREEN_WIDTH, 0, SCREEN_WIDTH],
+        outputRange: ['-20deg', `${rotation}deg`, '20deg'],
+        extrapolate: 'clamp',
+    });
+
+    // Opacity fades slightly as card moves away
+    const opacity = pan.x.interpolate({
+        inputRange: [-SCREEN_WIDTH / 2, 0, SCREEN_WIDTH / 2],
+        outputRange: [0.6, 1, 0.6],
+        extrapolate: 'clamp',
+    });
+
+    const forceSwipe = (direction: 'left' | 'right' | 'up') => {
+        let toValue = { x: 0, y: 0 };
+
+        if (direction === 'right') toValue = { x: SCREEN_WIDTH * 1.5, y: 0 };
+        else if (direction === 'left') toValue = { x: -SCREEN_WIDTH * 1.5, y: 0 };
+        else if (direction === 'up') toValue = { x: 0, y: -SCREEN_WIDTH * 1.5 };
+
+        Animated.timing(pan, {
+            toValue,
+            duration: SWIPE_OUT_DURATION,
+            useNativeDriver: false,
+        }).start(() => {
+            // Reset position after callback
+            pan.setValue({ x: 0, y: 0 });
+            if (direction === 'right') onSwipeRight?.();
+            else if (direction === 'left') onSwipeLeft?.();
+            else if (direction === 'up') onSwipeUp?.();
+        });
+    };
+
+    const resetPosition = () => {
+        Animated.spring(pan, {
+            toValue: { x: 0, y: 0 },
+            friction: 5,
+            tension: 40,
+            useNativeDriver: false,
+        }).start();
+    };
+
     const panResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
             onMoveShouldSetPanResponder: () => true,
             onPanResponderMove: Animated.event(
-                [
-                    null,
-                    {
-                        dx: pan.x,
-                        dy: pan.y,
-                    },
-                ],
+                [null, { dx: pan.x, dy: pan.y }],
                 { useNativeDriver: false }
             ),
-            onPanResponderRelease: (_, gestureState) => {
-                const { dx, dy } = gestureState;
-
-                // Threshold for swipe
-                const threshold = 80;
-
-                if (dy < -threshold) {
-                    // Swipe up
-                    onSwipeUp?.();
-                } else if (dx > threshold) {
-                    // Swipe right
-                    onSwipeRight?.();
-                } else if (dx < -threshold) {
-                    // Swipe left
-                    onSwipeLeft?.();
+            onPanResponderRelease: (_, { dx, dy }) => {
+                if (dy < -SWIPE_UP_THRESHOLD) {
+                    forceSwipe('up');
+                } else if (dx > SWIPE_THRESHOLD) {
+                    forceSwipe('right');
+                } else if (dx < -SWIPE_THRESHOLD) {
+                    forceSwipe('left');
+                } else {
+                    resetPosition();
                 }
-
-                // Reset position
-                Animated.spring(pan, {
-                    toValue: { x: 0, y: 0 },
-                    useNativeDriver: false,
-                }).start();
             },
         })
     ).current;
@@ -62,10 +92,11 @@ export function BookCard({
             style={[
                 styles.container,
                 {
+                    opacity,
                     transform: [
                         { translateX: pan.x },
                         { translateY: pan.y },
-                        { rotate: `${rotation}deg` },
+                        { rotate: dynamicRotation },
                     ],
                 },
                 style,
@@ -75,11 +106,7 @@ export function BookCard({
             {/* Cover Image */}
             <View style={styles.coverContainer}>
                 {coverUri ? (
-                    <Image
-                        source={{ uri: coverUri }}
-                        style={styles.cover}
-                        resizeMode="cover"
-                    />
+                    <Image source={{ uri: coverUri }} style={styles.cover} resizeMode="cover" />
                 ) : (
                     <Image
                         source={require('@/assets/images/default-cover.jpg')}

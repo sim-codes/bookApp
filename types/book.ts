@@ -8,6 +8,7 @@ export interface Book {
     fileName?: string;  // Original file name
     totalPages?: number;
     currentPage?: number;
+    epubLocator?: string;       // JSON stringified Locator for EPUB
     status?: 'reading' | 'completed' | 'paused';
     addedDate?: string; // YYYY-MM-DD format
     createdAt?: number;  // Timestamp

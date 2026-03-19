@@ -23,11 +23,12 @@ export default function HomeScreen() {
     initializeApp();
   }, []);
 
-  // Reload stats when screen focuses
+  // Reload data when screen focuses (after returning from reader)
   useFocusEffect(
     useCallback(() => {
+      loadBooks();
       loadStats();
-    }, [loadStats])
+    }, [loadBooks, loadStats])
   );
 
   const handleSwipeRight = () => {
@@ -51,6 +52,11 @@ export default function HomeScreen() {
 
   const handleMenuClose = () => {
     // Close menu by clicking outside
+  };
+
+  const calculateProgress = (book: typeof currentBook) => {
+    if (!book?.totalPages || !book?.currentPage) return 0;
+    return Math.min((book.currentPage / book.totalPages) * 100, 100);
   };
 
   const menuItems = useMemo(() => [
@@ -111,6 +117,7 @@ export default function HomeScreen() {
                 title={bookList[(currentIndex + 1) % bookList.length]?.title || 'Unknown'}
                 author={bookList[(currentIndex + 1) % bookList.length]?.author || 'Unknown'}
                 coverUri={bookList[(currentIndex + 1) % bookList.length]?.coverUri}
+                progress={calculateProgress(bookList[(currentIndex + 1) % bookList.length])}
                 rotation={-3}
                 style={styles.nextCard}
               />
@@ -122,6 +129,7 @@ export default function HomeScreen() {
               title={currentBook?.title || 'Unknown'}
               author={currentBook?.author || 'Unknown'}
               coverUri={currentBook?.coverUri}
+              progress={calculateProgress(currentBook)}
               rotation={3}
               onSwipeRight={handleSwipeRight}
               onSwipeLeft={handleSwipeLeft}
