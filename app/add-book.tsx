@@ -52,9 +52,16 @@ export default function AddBookScreen() {
     };
 
     const pickImage = async () => {
+        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (permissionResult.status !== 'granted') {
+            Alert.alert('Permission required', 'Permission to access the media library is required.');
+            return;
+        }
+
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaType.Images,
+                mediaTypes: ['images'],
                 allowsEditing: true,
                 aspect: [3, 4],
                 quality: 0.8,
