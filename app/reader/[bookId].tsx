@@ -3,7 +3,7 @@ import { useBooksStore, useReadingStore } from '@/stores';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Modal,
@@ -13,6 +13,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import PdfReader from 'react-native-pdf';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type FileType = 'txt' | 'pdf' | 'unknown';
@@ -34,6 +35,9 @@ export default function ReaderScreen() {
     const [loading, setLoading] = useState(true);
     const [isReading, setIsReading] = useState(false);
     const [fileType, setFileType] = useState<FileType>('unknown');
+    const [pdfPageCount, setPdfPageCount] = useState(0);
+    const [pdfUri, setPdfUri] = useState<string>('');
+    const pdfReaderRef = useRef(null);
     const [toast, setToast] = useState<ToastConfig>({
         visible: false,
         message: '',
@@ -88,9 +92,9 @@ export default function ReaderScreen() {
                     const lastPage = book.currentPage || 0;
                     setCurrentPageIndex(Math.min(lastPage, bookPages.length - 1));
                 } else if (type === 'pdf') {
-                    // For PDF, we'll show a placeholder for now
-                    setPages(['PDF Support Coming Soon', 'PDF files are being processed...']);
-                    showToast('PDF support is coming soon', 'info');
+                    // For PDF, just set the URI for react-native-pdf to handle
+                    setPdfUri(book.fileUri);
+                    setCurrentPageIndex(book.currentPage || 0);
                 } else {
                     showToast('Unsupported file format', 'error');
                     setPages(['Unsupported file format']);
@@ -231,7 +235,7 @@ export default function ReaderScreen() {
                     </Text>
                     <Text style={styles.headerSubtitle}>
                         {fileType === 'pdf' ? 'PDF' : 'Page'} {currentPageIndex + 1} of{' '}
-                        {pages.length}
+                        {fileType === 'pdf' ? pdfPageCount : pages.length}
                     </Text>
                 </View>
                 <View style={{ width: 24 }} />
@@ -251,13 +255,33 @@ export default function ReaderScreen() {
                 >
                     <Text style={styles.pageText}>{currentPage}</Text>
                 </ScrollView>
+            ) : fileType === 'pdf' ? (
+                <PdfReader
+                    ref={pdfReaderRef}
+                    source={{ uri: pdfUri }}
+                    onLoadComplete={(numberOfPages) => {
+                        setPdfPageCount(numberOfPages);
+                    }}
+                    page={currentPageIndex + 1}
+                    onPageChanged={(page) => {
+                        setCurrentPageIndex(page - 1);
+                    }}
+                    style={styles.pdfViewer}
+                    activityIndicator={<ActivityIndicator size="large" color={Colors.primary} />}
+                    onError={(error) => {
+                        console.error('PDF rendering error:', error);
+                        showToast('Error loading PDF', 'error');
+                    }}
+                    enablePaging={true}
+                    horizontal={false}
+                />
             ) : (
                 <View style={styles.contentArea}>
                     <View style={styles.placeholderContent}>
-                        <MaterialIcons name="picture-as-pdf" size={64} color={Colors.mediumGray} />
-                        <Text style={styles.placeholderText}>PDF Support Coming Soon</Text>
+                        <MaterialIcons name="error-outline" size={64} color={Colors.mediumGray} />
+                        <Text style={styles.placeholderText}>Unsupported Format</Text>
                         <Text style={styles.placeholderSubtext}>
-                            PDF reading will be available in the next update
+                            This file format is not supported
                         </Text>
                     </View>
                 </View>
@@ -437,6 +461,11 @@ const styles = StyleSheet.create({
     },
     contentArea: {
         flex: 1,
+    },
+    pdfViewer: {
+        flex: 1,
+        width: '100%',
+        backgroundColor: Colors.lightGray,
     },
     contentContainer: {
         paddingHorizontal: Spacing.lg,
