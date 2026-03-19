@@ -1,4 +1,5 @@
 import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { Toast } from '@/components/reader/Toast';
 import { useBooksStore } from '@/stores';
 import { Book } from '@/types';
 import { generateId } from '@/utils';
@@ -9,7 +10,6 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Image,
     ScrollView,
     StyleSheet,
@@ -21,6 +21,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const GENRES = ['Fiction', 'Non-Fiction', 'Mystery', 'Romance', 'Sci-Fi', 'Fantasy', 'Biography', 'Other'];
+
+interface ToastConfig {
+    visible: boolean;
+    message: string;
+    type: 'error' | 'success' | 'info';
+}
 
 export default function AddBookScreen() {
     const router = useRouter();
@@ -34,20 +40,48 @@ export default function AddBookScreen() {
     const [fileName, setFileName] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isBasicMode, setIsBasicMode] = useState(true);
+    const [toast, setToast] = useState<ToastConfig>({
+        visible: false,
+        message: '',
+        type: 'info',
+    });
+
+    const showToast = (message: string, type: ToastConfig['type'] = 'info') => {
+        setToast({ visible: true, message, type });
+        setTimeout(() => {
+            setToast(prev => ({ ...prev, visible: false }));
+        }, 3000);
+    };
+
+    const getFileType = (fileName: string): 'pdf' | 'txt' | 'epub' | 'unknown' => {
+        const ext = fileName.toLowerCase().split('.').pop() || '';
+        if (ext === 'pdf') return 'pdf';
+        if (ext === 'txt') return 'txt';
+        if (ext === 'epub') return 'epub';
+        return 'unknown';
+    };
 
     const pickFile = async () => {
         try {
             const result = await DocumentPicker.getDocumentAsync({
-                type: ['application/pdf', 'text/plain'],
+                type: ['application/pdf', 'text/plain', 'application/epub+zip'],
             });
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
                 const asset = result.assets[0];
+                const fileType = getFileType(asset.name || '');
+
+                if (fileType === 'unknown') {
+                    showToast('Please select a PDF, TXT, or EPUB file', 'error');
+                    return;
+                }
+
                 setFileUri(asset.uri);
                 setFileName(asset.name || 'book-file');
+                showToast(`${fileType.toUpperCase()} file selected`, 'success');
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to pick file');
+            showToast('Failed to pick file', 'error');
         }
     };
 
@@ -55,7 +89,7 @@ export default function AddBookScreen() {
         const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
         if (permissionResult.status !== 'granted') {
-            Alert.alert('Permission required', 'Permission to access the media library is required.');
+            showToast('Media library permission required', 'error');
             return;
         }
 
@@ -69,27 +103,29 @@ export default function AddBookScreen() {
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
                 setCoverUri(result.assets[0].uri);
+                showToast('Cover image selected', 'success');
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to pick image');
+            showToast('Failed to pick image', 'error');
         }
     };
 
     const handleAddBook = async () => {
         // Validation - only title and file are required
         if (!title.trim()) {
-            Alert.alert('Missing Title', 'Please enter a book title');
+            showToast('Please enter a book title', 'error');
             return;
         }
 
         if (!fileUri) {
-            Alert.alert('Missing Book File', 'Please select a book file (PDF or TXT)');
+            showToast('Please select a book file (PDF, TXT, or EPUB)', 'error');
             return;
         }
 
         setIsLoading(true);
 
         try {
+            const fileType = getFileType(fileName);
             const newBook: Book = {
                 id: generateId(),
                 title: title.trim(),
@@ -102,17 +138,16 @@ export default function AddBookScreen() {
                 currentPage: 0,
                 status: 'reading',
                 addedDate: new Date().toISOString().split('T')[0],
+                epubLocator: fileType === 'epub' ? '{}' : undefined,
             };
 
             await addBook(newBook);
-            Alert.alert('Success', `"${newBook.title}" added to your library!`, [
-                {
-                    text: 'OK',
-                    onPress: () => router.back(),
-                },
-            ]);
+            showToast(`"${newBook.title}" added to your library!`, 'success');
+            setTimeout(() => {
+                router.back();
+            }, 1500);
         } catch (error) {
-            Alert.alert('Error', 'Failed to add book. Please try again.');
+            showToast('Failed to add book. Please try again.', 'error');
             console.error(error);
         } finally {
             setIsLoading(false);
@@ -227,7 +262,7 @@ export default function AddBookScreen() {
 
                 {/* File Picker */}
                 <View style={styles.section}>
-                    <Text style={styles.label}>Book File (PDF or TXT) *</Text>
+                    <Text style={styles.label}>Book File (PDF, TXT, or EPUB) *</Text>
                     <TouchableOpacity style={styles.filePicker} onPress={pickFile}>
                         <MaterialIcons
                             name={fileUri ? 'check-circle' : 'file-upload'}
@@ -265,6 +300,13 @@ export default function AddBookScreen() {
 
                 <View style={styles.spacer} />
             </ScrollView>
+
+            {/* Toast Notification */}
+            <Toast
+                visible={toast.visible}
+                message={toast.message}
+                type={toast.type}
+            />
         </SafeAreaView>
     );
 }
