@@ -76,12 +76,12 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       },
     ],
     "./plugins/withAndroidDesugaring",
+    "./plugins/withCleartextTraffic",
     [
       "expo-build-properties",
       {
         android: {
           minSdkVersion: 24,
-          usesCleartextTraffic: true,
         },
       },
     ],
