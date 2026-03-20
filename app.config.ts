@@ -80,13 +80,13 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       "expo-build-properties",
       {
         android: {
-          minSdkVersion: 35,
+          minSdkVersion: 24,
+          usesCleartextTraffic: true,
         },
       },
     ],
     "@config-plugins/react-native-blob-util",
     "@config-plugins/react-native-pdf",
-    "expo-build-properties",
   ],
   experiments: {
     typedRoutes: true,
