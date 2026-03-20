@@ -1,12 +1,9 @@
-const {
-  withAppBuildGradle,
-  createRunOncePlugin,
-} = require('@expo/config-plugins');
+import { ConfigPlugin, withAppBuildGradle, createRunOncePlugin } from 'expo/config-plugins';
 
 const DESUGARING_DEPENDENCY =
   'coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.2"';
 
-const ensureDesugaringCompileOptions = (contents) => {
+const ensureDesugaringCompileOptions = (contents: string): string => {
   if (contents.includes('coreLibraryDesugaringEnabled true')) {
     return contents;
   }
@@ -28,7 +25,7 @@ const ensureDesugaringCompileOptions = (contents) => {
   );
 };
 
-const ensureDesugaringDependency = (contents) => {
+const ensureDesugaringDependency = (contents: string): string => {
   if (contents.includes(DESUGARING_DEPENDENCY)) {
     return contents;
   }
@@ -38,20 +35,20 @@ const ensureDesugaringDependency = (contents) => {
   );
 };
 
-const withAndroidDesugaring = (config) =>
-  withAppBuildGradle(config, (configProps) => {
+const withAndroidDesugaring: ConfigPlugin = (config) =>
+  withAppBuildGradle(config, (configProps: any) => {
     if (configProps.modResults.language !== 'groovy') {
       return configProps;
     }
 
-    let contents = configProps.modResults.contents;
+    let contents: string = configProps.modResults.contents;
     contents = ensureDesugaringCompileOptions(contents);
     contents = ensureDesugaringDependency(contents);
     configProps.modResults.contents = contents;
     return configProps;
   });
 
-module.exports = createRunOncePlugin(
+export default createRunOncePlugin(
   withAndroidDesugaring,
   'with-android-desugaring',
   '1.0.0',
