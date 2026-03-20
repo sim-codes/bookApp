@@ -76,7 +76,7 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       },
     ],
     "./plugins/withAndroidDesugaring",
-    "./plugins/withCleartextTraffic",
+    "./plugins/withNetworkSecurityConfig",
     [
       "expo-build-properties",
       {

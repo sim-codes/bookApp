@@ -3,6 +3,9 @@ import { ConfigPlugin, withAppBuildGradle, createRunOncePlugin } from 'expo/conf
 const DESUGARING_DEPENDENCY =
   'coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.2"';
 
+const KOTLINX_DATETIME_DEPENDENCY =
+  'implementation "org.jetbrains.kotlinx:kotlinx-datetime:0.6.0"';
+
 const ensureDesugaringCompileOptions = (contents: string): string => {
   if (contents.includes('coreLibraryDesugaringEnabled true')) {
     return contents;
@@ -35,6 +38,16 @@ const ensureDesugaringDependency = (contents: string): string => {
   );
 };
 
+const ensureKotlinxDatetimeDependency = (contents: string): string => {
+  if (contents.includes(KOTLINX_DATETIME_DEPENDENCY)) {
+    return contents;
+  }
+  return contents.replace(
+    /dependencies\s*{/,
+    `dependencies {\n    ${KOTLINX_DATETIME_DEPENDENCY}`,
+  );
+};
+
 const withAndroidDesugaring: ConfigPlugin = (config) =>
   withAppBuildGradle(config, (configProps: any) => {
     if (configProps.modResults.language !== 'groovy') {
@@ -44,6 +57,7 @@ const withAndroidDesugaring: ConfigPlugin = (config) =>
     let contents: string = configProps.modResults.contents;
     contents = ensureDesugaringCompileOptions(contents);
     contents = ensureDesugaringDependency(contents);
+    contents = ensureKotlinxDatetimeDependency(contents);
     configProps.modResults.contents = contents;
     return configProps;
   });
