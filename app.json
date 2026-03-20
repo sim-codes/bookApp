@@ -71,17 +71,12 @@
           }
         }
       ],
+      "./plugins/withAndroidDesugaring",
       [
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 35,
-            "compileOptions": {
-              "coreLibraryDesugaringEnabled": true
-            } 
-          },
-          "dependencies": {
-            "coreLibraryDesugaring": "com.android.tools:desugar_jdk_libs:2.1.2"
+            "minSdkVersion": 35
           }
         }
       ],
