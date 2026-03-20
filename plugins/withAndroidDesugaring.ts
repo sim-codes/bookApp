@@ -4,7 +4,7 @@ const DESUGARING_DEPENDENCY =
   'coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.2"';
 
 const KOTLINX_DATETIME_DEPENDENCY =
-  'implementation "org.jetbrains.kotlinx:kotlinx-datetime:0.6.0"';
+  'implementation "org.jetbrains.kotlinx:kotlinx-datetime:0.7.1-0.6.x-compat"';
 
 const ensureDesugaringCompileOptions = (contents: string): string => {
   if (contents.includes('coreLibraryDesugaringEnabled true')) {

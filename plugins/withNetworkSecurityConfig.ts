@@ -25,9 +25,13 @@ const withNetworkSecurityConfig: ConfigPlugin = (config) => {
     </trust-anchors>
   </debug-overrides>
   <base-config cleartextTrafficPermitted="${process.env.EAS_BUILD_PROFILE === 'development' ? 'true' : 'false'}">
+    <trust-anchors>
+      <certificates src="system" />
+    </trust-anchors>
+  </base-config>
+  <domain-config cleartextTrafficPermitted="true">
     <domain includeSubdomains="true">localhost</domain>
     <domain includeSubdomains="true">10.0.2.2</domain>
-    <domain includeSubdomains="true">10.255.131.32</domain>
   </domain-config>
 </network-security-config>`;
 
