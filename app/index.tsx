@@ -94,7 +94,7 @@ export default function HomeScreen() {
       <View style={styles.hero}>
         <Text style={styles.heroEyebrow}>Your Reading Adventure</Text>
         <Text style={styles.heroTitle}>Pick Your Next Journey</Text>
-        <Text style={styles.heroSubtitle}>Swipe right to dive in • left to skip</Text>
+        <Text style={styles.heroSubtitle}>Swipe right to dive in • left/up to skip</Text>
       </View>
 
       <View style={styles.streakCard}>

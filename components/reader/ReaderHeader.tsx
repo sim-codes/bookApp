@@ -31,8 +31,7 @@ export function ReaderHeader({
                     {title}
                 </Text>
                 <Text style={styles.headerSubtitle}>
-                    {fileType === 'pdf' ? 'PDF' : 'Page'} {currentPage} of {totalPages}
-                    {fileType === 'epub' ? 'pdf' : fileType === 'pdf' ? 'PDF' : 'Page'}{' '}
+                    {fileType === 'epub' ? 'Page' : fileType === 'pdf' ? 'PDF' : 'Page'}{' '}
                     {fileType === 'epub'
                         ? `${epubCurrentPosition} of ${epubTotalPositions}`
                         : fileType === 'pdf'

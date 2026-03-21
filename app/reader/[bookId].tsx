@@ -13,16 +13,17 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Animated,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import PdfReader from 'react-native-pdf';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import type { Link, Locator, PublicationReadyEvent, ReadiumViewRef } from 'react-native-readium';
 import { ReadiumView } from 'react-native-readium';
-import type { ReadiumViewRef, Locator, PublicationReadyEvent } from 'react-native-readium';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type FileType = 'txt' | 'pdf' | 'epub' | 'unknown';
 
@@ -62,18 +63,21 @@ export default function ReaderScreen() {
     const navigationDebounceRef = useRef<number | null>(null);
     const pdfPageChangeDebounceRef = useRef<number | null>(null);
     const lastPdfPageRef = useRef(0);
-    const savedInitialPageRef = useRef(0); // Stores the saved page to jump to after PDF loads
-    const pdfLoadedRef = useRef(false); // Tracks whether PDF has completed initial load
+    const savedInitialPageRef = useRef(0);
+    const pdfLoadedRef = useRef(false);
 
     const readiumRef = useRef<ReadiumViewRef>(null);
     const [epubLocator, setEpubLocator] = useState<Locator | null>(null);
     const [epubTotalPositions, setEpubTotalPositions] = useState(0);
     const [epubCurrentPosition, setEpubCurrentPosition] = useState(0);
     const epubLocatorDebounceRef = useRef<number | null>(null);
+    const [epubFontSize, setEpubFontSize] = useState(1);
+    const [tableOfContents, setTableOfContents] = useState<Link[]>([]);
+    const [showTocModal, setShowTocModal] = useState(false);
+    const drawerAnim = useRef(new Animated.Value(-350)).current;
 
     const book = bookId ? books?.[bookId] : null;
 
-    // Detect file type from extension
     const getFileType = (filePath: string): FileType => {
         const ext = filePath.toLowerCase().split('.').pop() || '';
         if (ext === 'pdf') return 'pdf';
@@ -82,7 +86,6 @@ export default function ReaderScreen() {
         return 'unknown';
     };
 
-    // Show toast notification — uses functional update to avoid stale closure
     const showToast = (message: string, type: ToastConfig['type'] = 'info') => {
         setToast({ visible: true, message, type });
         setTimeout(() => {
@@ -90,13 +93,11 @@ export default function ReaderScreen() {
         }, 3000);
     };
 
-    // Show confirmation dialog
     const showConfirm = (message: string, onConfirm: () => void) => {
         setConfirmAction(() => onConfirm);
         setShowConfirmDialog(true);
     };
 
-    // Load book content on mount
     useEffect(() => {
         const loadBookContent = async () => {
             try {
@@ -121,22 +122,17 @@ export default function ReaderScreen() {
                 setFileType(type);
 
                 if (type === 'txt') {
-                    console.log('Reading TXT file...');
                     const content = await FileSystem.readAsStringAsync(currentBook.fileUri);
                     const bookPages = splitIntoPages(content);
                     setPages(bookPages);
-
                     const lastPage = currentBook.currentPage || 0;
                     setCurrentPageIndex(Math.min(lastPage, bookPages.length - 1));
-                    console.log('TXT file loaded, pages:', bookPages.length);
                 } else if (type === 'pdf') {
                     const savedPage = currentBook.currentPage || 0;
-                    savedInitialPageRef.current = savedPage; // Store for post-load jump
+                    savedInitialPageRef.current = savedPage;
                     lastPdfPageRef.current = savedPage;
                     setCurrentPageIndex(savedPage);
                     setPdfUri(currentBook.fileUri);
-                    // NOTE: No pdfPageToDisplay state — page prop is intentionally absent
-                    // from PdfReader. Initial page restore happens via ref in onLoadComplete.
                 } else if (type === 'epub') {
                     const savedLocatorStr = currentBook.epubLocator;
                     if (savedLocatorStr) {
@@ -146,10 +142,8 @@ export default function ReaderScreen() {
                             setEpubLocator(null);
                         }
                     }
-                    setPdfUri(currentBook.fileUri); // reuse pdfUri state for the file path
-                }
-                else {
-                    console.log('Unsupported file type:', type);
+                    setPdfUri(currentBook.fileUri);
+                } else {
                     showToast('Unsupported file format', 'error');
                     setPages(['Unsupported file format']);
                 }
@@ -165,7 +159,23 @@ export default function ReaderScreen() {
         loadBookContent();
     }, [bookId, book]);
 
-    // Cleanup debounce timeouts on unmount
+    // Animate drawer open/close — slides from left
+    useEffect(() => {
+        if (showTocModal) {
+            Animated.timing(drawerAnim, {
+                toValue: 0,
+                duration: 280,
+                useNativeDriver: true,
+            }).start();
+        } else {
+            Animated.timing(drawerAnim, {
+                toValue: -350,
+                duration: 250,
+                useNativeDriver: true,
+            }).start();
+        }
+    }, [showTocModal, drawerAnim]);
+
     useEffect(() => {
         return () => {
             if (navigationDebounceRef.current) clearTimeout(navigationDebounceRef.current);
@@ -173,22 +183,18 @@ export default function ReaderScreen() {
         };
     }, []);
 
-    // Auto-start reading session when content loads
     useEffect(() => {
         if (fileType !== 'unknown' && !loading && !isReading && bookId) {
             handleStartReading();
         }
     }, [fileType, loading, isReading, bookId]);
 
-    // Split TXT content into pages
     const splitIntoPages = (content: string): string[] => {
         const charsPerPage = 1500;
         const pageArray: string[] = [];
-
         for (let i = 0; i < content.length; i += charsPerPage) {
             pageArray.push(content.substring(i, i + charsPerPage));
         }
-
         return pageArray.length > 0 ? pageArray : [''];
     };
 
@@ -242,7 +248,6 @@ export default function ReaderScreen() {
 
             navigationDebounceRef.current = setTimeout(async () => {
                 setCurrentPageIndex(newIndex);
-
                 if (bookId) {
                     try {
                         await updateBook(bookId, {
@@ -258,10 +263,7 @@ export default function ReaderScreen() {
         }
     };
 
-    // Debounced PDF page change handler — only updates header display and saves progress.
-    // Intentionally does NOT update any prop fed back to PdfReader (no feedback loop).
     const handlePdfPageChange = (page: number) => {
-        // Guard: ignore initial onPageChanged fired before the session starts
         if (!pdfLoadedRef.current) return;
 
         if (pdfPageChangeDebounceRef.current) clearTimeout(pdfPageChangeDebounceRef.current);
@@ -271,7 +273,7 @@ export default function ReaderScreen() {
 
         if (pageChange > 0) {
             lastPdfPageRef.current = newPageIndex;
-            setCurrentPageIndex(newPageIndex); // Header display only
+            setCurrentPageIndex(newPageIndex);
 
             pdfPageChangeDebounceRef.current = setTimeout(() => {
                 if (bookId) {
@@ -295,7 +297,6 @@ export default function ReaderScreen() {
 
             navigationDebounceRef.current = setTimeout(async () => {
                 setCurrentPageIndex(newIndex);
-
                 if (bookId) {
                     try {
                         const isCompleted = newIndex >= pages.length - 1;
@@ -313,12 +314,10 @@ export default function ReaderScreen() {
         }
     };
 
-    // Jump to a specific PDF page via ref — no state update that feeds back into PdfReader
     const jumpToPdfPage = (pageNum: number) => {
         if (pdfReaderRef.current?.setPage) {
             pdfReaderRef.current.setPage(pageNum);
         }
-        // Update header display and tracking ref only — not any prop on PdfReader
         setCurrentPageIndex(pageNum - 1);
         lastPdfPageRef.current = pageNum - 1;
     };
@@ -363,6 +362,8 @@ export default function ReaderScreen() {
 
     const progress = fileType === 'pdf'
         ? pdfPageCount > 0 ? ((currentPageIndex + 1) / pdfPageCount) * 100 : 0
+        : fileType === 'epub'
+        ? epubTotalPositions > 0 ? (epubCurrentPosition / epubTotalPositions) * 100 : 0
         : pages.length > 0 ? ((currentPageIndex + 1) / pages.length) * 100 : 0;
 
     const currentPage = pages[currentPageIndex] || '';
@@ -372,10 +373,10 @@ export default function ReaderScreen() {
             <ReaderHeader
                 title={bookTitle || 'Book'}
                 currentPage={currentPageIndex + 1}
-                totalPages={fileType === 'pdf' ? pdfPageCount : pages.length}
+                totalPages={fileType === 'pdf' ? pdfPageCount : fileType === 'epub' ? epubTotalPositions : pages.length}
                 epubCurrentPosition={fileType === 'epub' ? epubCurrentPosition : undefined}
                 epubTotalPositions={fileType === 'epub' ? epubTotalPositions : undefined}
-                fileType={(fileType === 'txt' ? 'txt' : 'pdf') as 'txt' | 'pdf' | 'epub'}
+                fileType={fileType as 'txt' | 'pdf' | 'epub'}
                 onBackPress={handleBackPress}
             />
 
@@ -405,23 +406,16 @@ export default function ReaderScreen() {
                         source={{ uri: pdfUri, cache: true }}
                         onLoadComplete={(numberOfPages) => {
                             setPdfPageCount(numberOfPages);
-                            // Restore saved page position imperatively after PDF is ready.
-                            // Using a short delay to ensure the internal renderer is stable
-                            // before issuing the setPage command.
                             const savedPage = savedInitialPageRef.current;
                             if (savedPage > 0 && pdfReaderRef.current?.setPage) {
                                 setTimeout(() => {
                                     pdfReaderRef.current?.setPage?.(savedPage + 1);
-                                    pdfLoadedRef.current = true; // Allow onPageChanged tracking now
+                                    pdfLoadedRef.current = true;
                                 }, 300);
                             } else {
                                 pdfLoadedRef.current = true;
                             }
                         }}
-                        // NO `page` prop — react-native-pdf owns scroll state internally.
-                        // Passing a controlled `page` prop that mirrors onPageChanged state
-                        // creates a feedback loop causing crashes and flashes on fast scroll.
-                        // All programmatic navigation uses pdfReaderRef.current.setPage() instead.
                         onPageChanged={handlePdfPageChange}
                         style={styles.pdfViewer}
                         onError={(error) => {
@@ -432,33 +426,37 @@ export default function ReaderScreen() {
                         horizontal={isPdfHorizontal}
                     />
                 ) : fileType === 'epub' ? (
-                        <ReadiumView
-                            ref={readiumRef}
-                            file={{ url: pdfUri }}
-                            location={epubLocator}        // safe as initial prop — not a feedback loop
-                            onLocationChange={(locator) => {
-                                // Update display
-                                const pos = locator?.locations?.position ?? 0;
-                                setEpubCurrentPosition(pos);
+                    <ReadiumView
+                        ref={readiumRef}
+                        file={{ url: pdfUri }}
+                        preferences={{ fontSize: epubFontSize }}
+                        onLocationChange={(locator) => {
+                            const pos = locator?.locations?.position ?? 0;
+                            setEpubCurrentPosition(pos);
 
-                                // Debounced save
-                                if (epubLocatorDebounceRef.current) {
-                                    clearTimeout(epubLocatorDebounceRef.current);
+                            if (epubLocatorDebounceRef.current) {
+                                clearTimeout(epubLocatorDebounceRef.current);
+                            }
+                            epubLocatorDebounceRef.current = setTimeout(() => {
+                                if (bookId) {
+                                    updateBook(bookId, {
+                                        epubLocator: JSON.stringify(locator),
+                                    }).catch(console.error);
                                 }
-                                epubLocatorDebounceRef.current = setTimeout(() => {
-                                    if (bookId) {
-                                        updateBook(bookId, {
-                                            epubLocator: JSON.stringify(locator),
-                                        }).catch(console.error);
-                                    }
+                            }, 500);
+                        }}
+                        onPublicationReady={(event: PublicationReadyEvent) => {
+                            setEpubTotalPositions(event.positions?.length ?? 0);
+                            setTableOfContents(event.tableOfContents ?? []);
+                            if (epubLocator && readiumRef.current?.goTo) {
+                                setTimeout(() => {
+                                    readiumRef.current?.goTo(epubLocator);
                                 }, 500);
-                            }}
-                            onPublicationReady={(event: PublicationReadyEvent) => {
-                                setEpubTotalPositions(event.positions?.length ?? 0);
-                            }}
-                            style={styles.pdfViewer} // same flex:1 style works fine
-                        />
-                    ) : (
+                            }
+                        }}
+                        style={styles.pdfViewer}
+                    />
+                ) : (
                     <View style={styles.contentArea}>
                         <View style={styles.placeholderContent}>
                             <MaterialIcons name="error-outline" size={64} color={Colors.mediumGray} />
@@ -476,11 +474,92 @@ export default function ReaderScreen() {
                         <ActivityIndicator size="large" color={Colors.primary} />
                     </View>
                 )}
+
+                {/* ─── Table of Contents Drawer ───────────────────────────────────────
+                    Layout: [drawer][backdrop] in a row.
+                    Drawer is FIRST so it appears on the LEFT side of the screen.
+                    drawerAnim starts at -350 (off-screen left) and animates to 0.
+                ──────────────────────────────────────────────────────────────────── */}
+                {showTocModal && (
+                    <View style={styles.drawerOverlay}>
+                        {/* Drawer on the LEFT */}
+                        <Animated.View
+                            style={[
+                                styles.drawer,
+                                { transform: [{ translateX: drawerAnim }] },
+                            ]}
+                        >
+                            {/* Header */}
+                            <View style={styles.tocHeader}>
+                                <View style={styles.tocHeaderLeft}>
+                                    <MaterialIcons name="menu-book" size={22} color={Colors.primary} />
+                                    <Text style={styles.tocTitle}>Contents</Text>
+                                </View>
+                                <TouchableOpacity
+                                    style={styles.tocCloseBtn}
+                                    onPress={() => setShowTocModal(false)}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
+                                    <MaterialIcons name="close" size={20} color={Colors.primary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Chapter count badge */}
+                            {tableOfContents.length > 0 && (
+                                <View style={styles.tocMeta}>
+                                    <Text style={styles.tocMetaText}>
+                                        {tableOfContents.length} {tableOfContents.length === 1 ? 'chapter' : 'chapters'}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {/* TOC list */}
+                            <ScrollView
+                                style={styles.tocList}
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={styles.tocListContent}
+                            >
+                                {tableOfContents.length > 0 ? (
+                                    tableOfContents.map((item, index) => (
+                                        <TOCItem
+                                            key={index}
+                                            item={item}
+                                            index={index}
+                                            onSelect={(href) => {
+                                                const locator: Locator = {
+                                                    href,
+                                                    type: 'application/xhtml+xml',
+                                                };
+                                                readiumRef.current?.goTo(locator);
+                                                setShowTocModal(false);
+                                                showToast('Navigated to chapter', 'success');
+                                            }}
+                                        />
+                                    ))
+                                ) : (
+                                    <View style={styles.tocEmptyContainer}>
+                                        <MaterialIcons name="chrome-reader-mode" size={48} color={Colors.mediumGray} />
+                                        <Text style={styles.tocEmptyTitle}>No chapters found</Text>
+                                        <Text style={styles.tocEmptyText}>
+                                            This book doesn't have a table of contents
+                                        </Text>
+                                    </View>
+                                )}
+                            </ScrollView>
+                        </Animated.View>
+
+                        {/* Backdrop on the RIGHT — tapping closes the drawer */}
+                        <TouchableOpacity
+                            style={styles.drawerBackdrop}
+                            activeOpacity={1}
+                            onPress={() => setShowTocModal(false)}
+                        />
+                    </View>
+                )}
             </View>
 
             {/* Navigation Footer */}
             <View style={styles.footer}>
-                {/* Reading Session Button */}
                 <TouchableOpacity
                     style={[styles.sessionButton, isReading && styles.sessionButtonActive]}
                     onPress={isReading ? handleEndReadingAndClose : handleStartReading}
@@ -495,7 +574,6 @@ export default function ReaderScreen() {
                     </Text>
                 </TouchableOpacity>
 
-                {/* TXT Page Navigation */}
                 {fileType === 'txt' && (
                     <TxtNavigation
                         currentPage={currentPageIndex}
@@ -506,7 +584,6 @@ export default function ReaderScreen() {
                     />
                 )}
 
-                {/* PDF Navigation */}
                 {fileType === 'pdf' && (
                     <PdfNavigation
                         isHorizontal={isPdfHorizontal}
@@ -516,15 +593,42 @@ export default function ReaderScreen() {
                 )}
 
                 {fileType === 'epub' && (
-                    <View style={styles.pdfNavigation}>
+                    <View style={styles.epubNavigation}>
+                        {/* TOC button */}
                         <TouchableOpacity
-                            style={[styles.navButton, styles.toggleButton]}
+                            style={styles.epubNavBtn}
+                            onPress={() => setShowTocModal(true)}
+                        >
+                            <MaterialIcons name="menu-book" size={20} color={Colors.primary} />
+                        </TouchableOpacity>
+
+                        {/* Font size decrease */}
+                        <TouchableOpacity
+                            style={styles.epubNavBtn}
+                            onPress={() => setEpubFontSize(prev => Math.max(0.75, prev - 0.25))}
+                        >
+                            <Text style={styles.fontSizeLabel}>A−</Text>
+                        </TouchableOpacity>
+
+                        {/* Font size increase */}
+                        <TouchableOpacity
+                            style={styles.epubNavBtn}
+                            onPress={() => setEpubFontSize(prev => Math.min(2, prev + 0.25))}
+                        >
+                            <Text style={[styles.fontSizeLabel, styles.fontSizeLabelLg]}>A+</Text>
+                        </TouchableOpacity>
+
+                        {/* Previous page */}
+                        <TouchableOpacity
+                            style={styles.epubNavBtn}
                             onPress={() => readiumRef.current?.goBackward()}
                         >
                             <MaterialIcons name="arrow-back-ios" size={20} color={Colors.primary} />
                         </TouchableOpacity>
+
+                        {/* Next page */}
                         <TouchableOpacity
-                            style={[styles.navButton, styles.toggleButton]}
+                            style={styles.epubNavBtn}
                             onPress={() => readiumRef.current?.goForward()}
                         >
                             <MaterialIcons name="arrow-forward-ios" size={20} color={Colors.primary} />
@@ -533,14 +637,12 @@ export default function ReaderScreen() {
                 )}
             </View>
 
-            {/* Toast Notification */}
             <Toast
                 visible={toast.visible}
                 message={toast.message}
                 type={toast.type}
             />
 
-            {/* Confirmation Dialog Modal */}
             <ConfirmationDialog
                 visible={showConfirmDialog}
                 title="End Reading?"
@@ -554,14 +656,11 @@ export default function ReaderScreen() {
                 cancelText="Discard"
             />
 
-            {/* Jump to Page Modal */}
             <JumpToPageModal
                 visible={showJumpToPageModal}
                 currentPage={currentPageIndex}
                 maxPage={pdfPageCount}
-                onClose={() => {
-                    setShowJumpToPageModal(false);
-                }}
+                onClose={() => setShowJumpToPageModal(false)}
                 onJump={(pageNum) => {
                     jumpToPdfPage(pageNum);
                     setShowJumpToPageModal(false);
@@ -571,6 +670,92 @@ export default function ReaderScreen() {
         </SafeAreaView>
     );
 }
+
+// ─── TOC Item Component ────────────────────────────────────────────────────────
+
+function TOCItem({
+    item,
+    onSelect,
+    depth = 0,
+    index = 0,
+}: {
+    item: Link;
+    onSelect: (href: string) => void;
+    depth?: number;
+    index?: number;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const hasChildren = (item.children?.length ?? 0) > 0;
+
+    return (
+        <View>
+            <TouchableOpacity
+                style={[
+                    styles.tocItem,
+                    depth === 0 && styles.tocItemTop,
+                    { paddingLeft: 20 + depth * 16 },
+                ]}
+                activeOpacity={0.65}
+                onPress={() => {
+                    if (hasChildren) {
+                        setExpanded(!expanded);
+                    } else {
+                        onSelect(item.href);
+                    }
+                }}
+            >
+                {/* Chapter number badge for top-level items */}
+                {depth === 0 && (
+                    <View style={styles.tocChapterBadge}>
+                        <Text style={styles.tocChapterNum}>{index + 1}</Text>
+                    </View>
+                )}
+
+                <Text
+                    style={[
+                        styles.tocItemText,
+                        depth === 0 && styles.tocItemTextTop,
+                        depth > 0 && styles.tocItemTextSub,
+                    ]}
+                    numberOfLines={2}
+                >
+                    {item.title || 'Untitled'}
+                </Text>
+
+                {hasChildren && (
+                    <MaterialIcons
+                        name={expanded ? 'expand-less' : 'expand-more'}
+                        size={20}
+                        color={Colors.primary}
+                        style={styles.tocChevron}
+                    />
+                )}
+
+                {!hasChildren && (
+                    <MaterialIcons
+                        name="chevron-right"
+                        size={18}
+                        color={Colors.mediumGray}
+                        style={styles.tocChevron}
+                    />
+                )}
+            </TouchableOpacity>
+
+            {expanded &&
+                item.children?.map((child, idx) => (
+                    <TOCItem
+                        key={idx}
+                        item={child}
+                        onSelect={onSelect}
+                        depth={depth + 1}
+                        index={idx}
+                    />
+                ))}
+        </View>
+    );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
     container: {
@@ -679,5 +864,172 @@ const styles = StyleSheet.create({
         ...TextStyles.body,
         color: Colors.white,
         fontWeight: '600',
+    },
+
+    // ── EPUB navigation bar ──────────────────────────────────────────────────
+    epubNavigation: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: Spacing.sm,
+    },
+    epubNavBtn: {
+        flex: 1,
+        paddingVertical: Spacing.md,
+        borderRadius: BorderRadius.md,
+        borderWidth: 1.5,
+        borderColor: Colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 44,
+    },
+    fontSizeLabel: {
+        fontSize: 15,
+        color: Colors.primary,
+        fontWeight: '700',
+    },
+    fontSizeLabelLg: {
+        fontSize: 17,
+    },
+
+    // ── Drawer overlay ───────────────────────────────────────────────────────
+    drawerOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        flexDirection: 'row',   // [drawer | backdrop]
+        zIndex: 1000,
+    },
+    drawerBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    },
+    drawer: {
+        width: 310,
+        backgroundColor: Colors.white,
+        shadowColor: '#000',
+        shadowOffset: { width: 4, height: 0 },
+        shadowOpacity: 0.18,
+        shadowRadius: 16,
+    },
+
+    // ── TOC header ───────────────────────────────────────────────────────────
+    tocHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 14,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: Colors.lightGray,
+    },
+    tocHeaderLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    tocTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: Colors.textDark,
+        letterSpacing: 0.2,
+    },
+    tocCloseBtn: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: Colors.lightGray,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    // ── TOC meta (chapter count) ─────────────────────────────────────────────
+    tocMeta: {
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: Colors.lightGray,
+    },
+    tocMetaText: {
+        fontSize: 12,
+        color: Colors.textLight,
+        fontWeight: '500',
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
+    },
+
+    // ── TOC list ─────────────────────────────────────────────────────────────
+    tocList: {
+        flex: 1,
+    },
+    tocListContent: {
+        paddingBottom: 24,
+    },
+
+    // ── TOC items ────────────────────────────────────────────────────────────
+    tocItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 13,
+        paddingRight: 16,
+        gap: 10,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: Colors.lightGray,
+    },
+    tocItemTop: {
+        paddingVertical: 15,
+    },
+    tocChapterBadge: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: Colors.primary + '15', // primary at ~8% opacity
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+    },
+    tocChapterNum: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: Colors.primary,
+    },
+    tocItemText: {
+        ...TextStyles.body,
+        color: Colors.textDark,
+        flex: 1,
+        lineHeight: 20,
+    },
+    tocItemTextTop: {
+        fontSize: 15,
+        fontWeight: '500',
+    },
+    tocItemTextSub: {
+        fontSize: 14,
+        color: Colors.textLight,
+    },
+    tocChevron: {
+        flexShrink: 0,
+    },
+
+    // ── TOC empty state ──────────────────────────────────────────────────────
+    tocEmptyContainer: {
+        alignItems: 'center',
+        paddingTop: 56,
+        paddingHorizontal: 24,
+        gap: 12,
+    },
+    tocEmptyTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.textDark,
+    },
+    tocEmptyText: {
+        ...TextStyles.body,
+        color: Colors.textLight,
+        textAlign: 'center',
+        lineHeight: 20,
     },
 });
