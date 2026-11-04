@@ -3,7 +3,7 @@ import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
 import { bookFiles } from '@/services';
 import { useBooksStore } from '@/stores';
 import { Book } from '@/types';
-import { generateId } from '@/utils';
+import { generateId, getTodayDate } from '@/utils';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -81,7 +81,7 @@ export default function AddBookScreen() {
                 setFileName(asset.name || 'book-file');
                 showToast(`${fileType.toUpperCase()} file selected`, 'success');
             }
-        } catch (error) {
+        } catch {
             showToast('Failed to pick file', 'error');
         }
     };
@@ -106,7 +106,7 @@ export default function AddBookScreen() {
                 setCoverUri(result.assets[0].uri);
                 showToast('Cover image selected', 'success');
             }
-        } catch (error) {
+        } catch {
             showToast('Failed to pick image', 'error');
         }
     };
@@ -143,10 +143,12 @@ export default function AddBookScreen() {
                 coverUri: storedCoverUri,
                 fileUri: storedFileUri,
                 fileName,
-                totalPages: Math.floor(Math.random() * 400) + 50,
+                // Real page count is only known once the book is opened, so the
+                // reader fills it in then; until then progress shows as 0.
+                totalPages: undefined,
                 currentPage: 0,
                 status: 'reading',
-                addedDate: new Date().toISOString().split('T')[0],
+                addedDate: getTodayDate(),
             };
 
             await addBook(newBook);

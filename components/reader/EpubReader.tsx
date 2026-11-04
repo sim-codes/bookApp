@@ -58,7 +58,7 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
     const [showTocModal, setShowTocModal] = useState(false);
 
     const readiumRef = useRef<ReadiumViewRef>(null);
-    const epubLocatorDebounceRef = useRef<number | null>(null);
+    const epubLocatorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const drawerAnim = useRef(new Animated.Value(-350)).current;
 
     // Expose actions to parent via ref — no state updates in parent render
@@ -70,8 +70,15 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
         decreaseFontSize: () => setEpubFontSize(prev => Math.max(0.75, prev - 0.25)),
     }), []);
 
+    // Keep the latest callback in a ref so the parent can pass an inline function
+    // without re-triggering the position effect on every render.
+    const onPositionChangeRef = useRef(onPositionChange);
     useEffect(() => {
-        onPositionChange(epubCurrentPosition, epubTotalPositions);
+        onPositionChangeRef.current = onPositionChange;
+    });
+
+    useEffect(() => {
+        onPositionChangeRef.current(epubCurrentPosition, epubTotalPositions);
     }, [epubCurrentPosition, epubTotalPositions]);
 
     useEffect(() => {
@@ -171,7 +178,7 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
                                     <MaterialIcons name="chrome-reader-mode" size={48} color={Colors.mediumGray} />
                                     <Text style={styles.tocEmptyTitle}>No chapters found</Text>
                                     <Text style={styles.tocEmptyText}>
-                                        This book doesn't have a table of contents
+                                        This book doesn&apos;t have a table of contents
                                     </Text>
                                 </View>
                             )}
@@ -192,7 +199,7 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
 // ─── Navigation Bar ───────────────────────────────────────────────────────────
 
 interface EpubNavigationBarProps {
-    epubRef: React.RefObject<EpubReaderHandle>;
+    epubRef: React.RefObject<EpubReaderHandle | null>;
 }
 
 export function EpubNavigationBar({ epubRef }: EpubNavigationBarProps) {

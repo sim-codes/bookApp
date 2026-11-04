@@ -23,12 +23,12 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
+    // RECORD_AUDIO is intentionally not requested: the app never records audio.
     permissions: [
       "android.permission.READ_EXTERNAL_STORAGE",
       "android.permission.WRITE_EXTERNAL_STORAGE",
       "android.permission.DOWNLOAD_WITHOUT_NOTIFICATION",
       "android.permission.ACCESS_NETWORK_STATE",
-      "android.permission.RECORD_AUDIO",
     ],
     package: "com.sim_codes.bookApp",
   },
@@ -64,7 +64,8 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       "expo-image-picker",
       {
         photosPermission:
-          "The app accesses your photos to let you share them with your friends.",
+          "bookApp accesses your photos so you can pick a cover image for your books.",
+        microphonePermission: false,
         colors: {
           cropToolbarColor: "#000000",
         },

@@ -77,16 +77,11 @@ export const useBooksStore = create<BooksStore>((set, get) => ({
 
     updateBook: async (bookId, updates) => {
         try {
-            const existingBook = get().books[bookId];
-            if (!existingBook) throw new Error('Book not found');
+            // Merge against the latest stored copy (serialized in storage) rather than
+            // this store's snapshot, so overlapping updates can't overwrite each other.
+            const updatedBook = await booksStorage.update(bookId, updates);
+            if (!updatedBook) throw new Error('Book not found');
 
-            const updatedBook: Book = {
-                ...existingBook,
-                ...updates,
-                updatedAt: Date.now(),
-            };
-
-            await booksStorage.save(updatedBook);
             set((state) => ({
                 books: {
                     ...state.books,

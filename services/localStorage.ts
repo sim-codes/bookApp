@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Book, BookProgress, LocalLibrary } from '../types/book';
 import { DailySessions, ReadingSession, ReadingStats } from '../types/reading';
+import { bookFiles } from './bookFiles';
 
 const KEYS = {
     BOOKS: '@bookapp/books',
@@ -9,6 +10,15 @@ const KEYS = {
     USER_ID: '@bookapp/userid',
     READING_STATS: '@bookapp/stats',
 };
+
+// Every save is a read-modify-write of one JSON blob. Run them one at a time so
+// concurrent saves (debounced progress, session end, ...) can't overwrite each other.
+let writeChain: Promise<unknown> = Promise.resolve();
+function serialize<T>(task: () => Promise<T>): Promise<T> {
+    const run = writeChain.then(task, task);
+    writeChain = run.catch(() => undefined);
+    return run;
+}
 
 // ============ BOOKS ============
 export const booksStorage = {
@@ -34,20 +44,46 @@ export const booksStorage = {
 
     async save(book: Book): Promise<void> {
         try {
-            const books = await this.getAll();
-            books[book.id] = book;
-            await AsyncStorage.setItem(KEYS.BOOKS, JSON.stringify(books));
+            await serialize(async () => {
+                const books = await this.getAll();
+                books[book.id] = book;
+                await AsyncStorage.setItem(KEYS.BOOKS, JSON.stringify(books));
+            });
         } catch (error) {
             console.error('Error saving book:', error);
             throw error;
         }
     },
 
+    /**
+     * Merge `updates` into the latest stored copy of a book. Merging against what's
+     * on disk (not a possibly stale in-memory copy) keeps parallel updates, such as a
+     * locator save and a status change, from clobbering each other.
+     */
+    async update(bookId: string, updates: Partial<Book>): Promise<Book | null> {
+        try {
+            return await serialize(async () => {
+                const books = await this.getAll();
+                const existing = books[bookId];
+                if (!existing) return null;
+                const updated: Book = { ...existing, ...updates, updatedAt: Date.now() };
+                books[bookId] = updated;
+                await AsyncStorage.setItem(KEYS.BOOKS, JSON.stringify(books));
+                return updated;
+            });
+        } catch (error) {
+            console.error('Error updating book:', error);
+            throw error;
+        }
+    },
+
     async delete(bookId: string): Promise<void> {
         try {
-            const books = await this.getAll();
-            delete books[bookId];
-            await AsyncStorage.setItem(KEYS.BOOKS, JSON.stringify(books));
+            await serialize(async () => {
+                const books = await this.getAll();
+                delete books[bookId];
+                await AsyncStorage.setItem(KEYS.BOOKS, JSON.stringify(books));
+            });
         } catch (error) {
             console.error('Error deleting book:', error);
             throw error;
@@ -88,9 +124,11 @@ export const progressStorage = {
 
     async save(bookId: string, progress: BookProgress): Promise<void> {
         try {
-            const all = await this.getAll();
-            all[bookId] = progress;
-            await AsyncStorage.setItem(KEYS.BOOK_PROGRESS, JSON.stringify(all));
+            await serialize(async () => {
+                const all = await this.getAll();
+                all[bookId] = progress;
+                await AsyncStorage.setItem(KEYS.BOOK_PROGRESS, JSON.stringify(all));
+            });
         } catch (error) {
             console.error('Error saving progress:', error);
             throw error;
@@ -99,11 +137,22 @@ export const progressStorage = {
 
     async delete(bookId: string): Promise<void> {
         try {
-            const all = await this.getAll();
-            delete all[bookId];
-            await AsyncStorage.setItem(KEYS.BOOK_PROGRESS, JSON.stringify(all));
+            await serialize(async () => {
+                const all = await this.getAll();
+                delete all[bookId];
+                await AsyncStorage.setItem(KEYS.BOOK_PROGRESS, JSON.stringify(all));
+            });
         } catch (error) {
             console.error('Error deleting progress:', error);
+            throw error;
+        }
+    },
+
+    async clear(): Promise<void> {
+        try {
+            await AsyncStorage.removeItem(KEYS.BOOK_PROGRESS);
+        } catch (error) {
+            console.error('Error clearing progress:', error);
             throw error;
         }
     },
@@ -133,15 +182,17 @@ export const sessionsStorage = {
 
     async save(session: ReadingSession): Promise<void> {
         try {
-            const all = await this.getAll();
-            const date = session.date;
+            await serialize(async () => {
+                const all = await this.getAll();
+                const date = session.date;
 
-            if (!all[date]) {
-                all[date] = [];
-            }
+                if (!all[date]) {
+                    all[date] = [];
+                }
 
-            all[date].push(session);
-            await AsyncStorage.setItem(KEYS.READING_SESSIONS, JSON.stringify(all));
+                all[date].push(session);
+                await AsyncStorage.setItem(KEYS.READING_SESSIONS, JSON.stringify(all));
+            });
         } catch (error) {
             console.error('Error saving session:', error);
             throw error;
@@ -238,9 +289,13 @@ function generateUserId(): string {
 // ============ UTILITY ============
 export async function clearAllData(): Promise<void> {
     try {
+        // Remove the copied book/cover files too, otherwise they're orphaned on disk.
+        const books = Object.values(await booksStorage.getAll());
+        await Promise.all(books.map(book => bookFiles.remove(book.fileUri, book.coverUri)));
+
         await Promise.all([
             booksStorage.clear(),
-            progressStorage.delete,
+            progressStorage.clear(),
             sessionsStorage.clear(),
             statsStorage.clear(),
         ]);

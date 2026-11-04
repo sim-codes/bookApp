@@ -21,7 +21,7 @@ export default function HomeScreen() {
       await Promise.all([loadBooks(), loadStats()]);
     };
     initializeApp();
-  }, []);
+  }, [loadBooks, loadStats]);
 
   // Reload data when screen focuses (after returning from reader)
   useFocusEffect(
