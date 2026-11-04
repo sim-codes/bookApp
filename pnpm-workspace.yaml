@@ -1,0 +1,10 @@
+# Reject dependency versions published less than 24h ago (supply-chain safety).
+# EAS Build's pnpm enforces this default and fails the install otherwise.
+minimumReleaseAge: 1440
+# Expo SDK packages release as a set and require each other's newest patch,
+# so they can't be resolved to older versions individually.
+minimumReleaseAgeExclude:
+  - expo
+  - expo-*
+  - '@expo/*'
+  - babel-preset-expo
