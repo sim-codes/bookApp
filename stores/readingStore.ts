@@ -1,7 +1,10 @@
-import { sessionsStorage, statsStorage } from '@/services';
+import { booksStorage, sessionsStorage, statsStorage } from '@/services';
 import { ReadingSession, ReadingStats } from '@/types';
-import { generateId, getTodayDate, getTotalHours } from '@/utils';
+import { generateId, getTodayDate, getTotalHours, shiftDate } from '@/utils';
 import { create } from 'zustand';
+
+// Sessions shorter than this are treated as an accidental open/close and ignored.
+const MIN_SESSION_MS = 10_000;
 
 interface ReadingStore {
     stats: ReadingStats;
@@ -31,7 +34,10 @@ export const useReadingStore = create<ReadingStore>((set, get) => ({
     loadStats: async () => {
         set({ loading: true });
         try {
-            const stats = await statsStorage.get();
+            // Recompute rather than trusting the stored value: the streak depends on
+            // today's date, so a stored number goes stale as soon as a day is missed.
+            const stats = await get().calculateStats();
+            await statsStorage.save(stats);
             set({ stats });
         } catch (error) {
             console.error('Error loading stats:', error);
@@ -58,9 +64,11 @@ export const useReadingStore = create<ReadingStore>((set, get) => ({
         if (!session) return;
 
         const endTime = Date.now();
-        const duration = Math.floor((endTime - session.startTime) / 60000); // Convert to minutes
+        const elapsedMs = endTime - session.startTime;
+        // Minutes with one decimal, so short real sessions still count toward the streak.
+        const duration = Math.round(elapsedMs / 6000) / 10;
 
-        if (duration > 0) {
+        if (elapsedMs >= MIN_SESSION_MS) {
             const completedSession: ReadingSession = {
                 ...session,
                 endTime,
@@ -114,22 +122,16 @@ export const useReadingStore = create<ReadingStore>((set, get) => ({
             const sortedDates = Array.from(readDates).sort().reverse();
             const today = getTodayDate();
 
-            // Calculate streak
+            // Current streak: consecutive days ending today, or ending yesterday
+            // (the streak is still alive until the day is missed).
             let currentStreak = 0;
-            if (sortedDates.length === 0) {
-                currentStreak = 0;
-            } else if (sortedDates[0] === today) {
-                // Started reading today
-                for (let i = 0; i < sortedDates.length; i++) {
-                    const expectedDate = new Date(today);
-                    expectedDate.setDate(expectedDate.getDate() - i);
-                    const expectedDateStr = expectedDate.toISOString().split('T')[0];
-
-                    if (sortedDates[i] === expectedDateStr) {
-                        currentStreak++;
-                    } else {
-                        break;
-                    }
+            const yesterday = shiftDate(today, -1);
+            if (sortedDates.length > 0 && (sortedDates[0] === today || sortedDates[0] === yesterday)) {
+                let expected = sortedDates[0];
+                for (const date of sortedDates) {
+                    if (date !== expected) break;
+                    currentStreak++;
+                    expected = shiftDate(expected, -1);
                 }
             }
 
@@ -141,9 +143,7 @@ export const useReadingStore = create<ReadingStore>((set, get) => ({
                 if (i === 0) {
                     tempStreak = 1;
                 } else {
-                    const currentDate = new Date(sortedDates[i - 1]);
-                    currentDate.setDate(currentDate.getDate() - 1);
-                    const previousExpected = currentDate.toISOString().split('T')[0];
+                    const previousExpected = shiftDate(sortedDates[i - 1], -1);
 
                     if (sortedDates[i] === previousExpected) {
                         tempStreak++;
@@ -158,10 +158,16 @@ export const useReadingStore = create<ReadingStore>((set, get) => ({
             const totalHours = getTotalHours(totalMinutes);
             const lastReadDate = sortedDates.length > 0 ? sortedDates[0] : null;
 
+            const books = Object.values(await booksStorage.getAll());
+            const booksRead = books.filter(b => b.status === 'completed').length;
+            const booksStarted = books.filter(
+                b => b.status === 'completed' || (b.currentPage ?? 0) > 0,
+            ).length;
+
             const stats: ReadingStats = {
                 totalHours,
-                booksRead: 0, // Will be calculated from completed books
-                booksStarted: 0,
+                booksRead,
+                booksStarted,
                 currentStreak,
                 longestStreak: Math.max(longestStreak, currentStreak),
                 lastReadDate,

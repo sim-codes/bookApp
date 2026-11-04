@@ -70,8 +70,15 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
         decreaseFontSize: () => setEpubFontSize(prev => Math.max(0.75, prev - 0.25)),
     }), []);
 
+    // Keep the latest callback in a ref so the parent can pass an inline function
+    // without re-triggering the position effect on every render.
+    const onPositionChangeRef = useRef(onPositionChange);
     useEffect(() => {
-        onPositionChange(epubCurrentPosition, epubTotalPositions);
+        onPositionChangeRef.current = onPositionChange;
+    });
+
+    useEffect(() => {
+        onPositionChangeRef.current(epubCurrentPosition, epubTotalPositions);
     }, [epubCurrentPosition, epubTotalPositions]);
 
     useEffect(() => {

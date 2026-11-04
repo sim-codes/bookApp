@@ -116,6 +116,8 @@ export default function ReaderScreen() {
                     const content = await FileSystem.readAsStringAsync(currentBook.fileUri);
                     const bookPages = splitIntoPages(content);
                     setPages(bookPages);
+                    // Persist the real page count as soon as it's known.
+                    updateBook(currentBook.id, { totalPages: bookPages.length }).catch(console.error);
                     const lastPage = currentBook.currentPage || 0;
                     setCurrentPageIndex(Math.min(lastPage, bookPages.length - 1));
                 } else if (type === 'pdf') {
@@ -154,11 +156,16 @@ export default function ReaderScreen() {
         };
     }, []);
 
+    // Start the session automatically once, when the book has loaded. Guarded by a
+    // ref so ending a session (isReading -> false) doesn't immediately restart it.
+    const autoStartedRef = useRef(false);
     useEffect(() => {
-        if (fileType !== 'unknown' && !loading && !isReading && bookId) {
+        if (fileType !== 'unknown' && !loading && bookId && !autoStartedRef.current) {
+            autoStartedRef.current = true;
             handleStartReading();
         }
-    }, [fileType, loading, isReading, bookId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fileType, loading, bookId]);
 
     const splitIntoPages = (content: string): string[] => {
         const charsPerPage = 1500;
@@ -177,7 +184,7 @@ export default function ReaderScreen() {
 
     const handleEndReading = async () => {
         try {
-            await endSession(currentPageIndex);
+            await endSession(fileType === 'epub' ? epubCurrentPosition : currentPageIndex);
             setIsReading(false);
 
             if (bookId) {
@@ -375,6 +382,9 @@ export default function ReaderScreen() {
                         source={{ uri: pdfUri, cache: true }}
                         onLoadComplete={(numberOfPages) => {
                             setPdfPageCount(numberOfPages);
+                            if (bookId) {
+                                updateBook(bookId, { totalPages: numberOfPages }).catch(console.error);
+                            }
                             const savedPage = savedInitialPageRef.current;
                             if (savedPage > 0 && pdfReaderRef.current?.setPage) {
                                 setTimeout(() => {

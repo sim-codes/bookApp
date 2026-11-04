@@ -17,29 +17,45 @@ export function generateId(): string {
 }
 
 /**
- * Get today's date in YYYY-MM-DD format
+ * Format a Date as YYYY-MM-DD in the device's LOCAL time zone.
+ * (toISOString() is UTC, which puts the day boundary at the wrong hour for
+ * anyone not on UTC, e.g. 1am in Lagos.)
+ */
+export function formatLocalDate(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+/**
+ * Shift a YYYY-MM-DD string by a number of days (negative = earlier),
+ * using local calendar arithmetic.
+ */
+export function shiftDate(dateString: string, days: number): string {
+    const [y, m, d] = dateString.split('-').map(Number);
+    return formatLocalDate(new Date(y, m - 1, d + days));
+}
+
+/**
+ * Get today's date in YYYY-MM-DD format (local time)
  */
 export function getTodayDate(): string {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
+    return formatLocalDate(new Date());
 }
 
 /**
- * Get yesterday's date in YYYY-MM-DD format
+ * Get yesterday's date in YYYY-MM-DD format (local time)
  */
 export function getYesterdayDate(): string {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    return yesterday.toISOString().split('T')[0];
+    return shiftDate(getTodayDate(), -1);
 }
 
 /**
- * Get date N days ago
+ * Get date N days ago (local time)
  */
 export function getDateNDaysAgo(days: number): string {
-    const date = new Date();
-    date.setDate(date.getDate() - days);
-    return date.toISOString().split('T')[0];
+    return shiftDate(getTodayDate(), -days);
 }
 
 /**
@@ -100,7 +116,7 @@ export function calculateStreak(lastReadDate: string | null, today: string): num
     // Go backwards from today
     while (true) {
         currentDate.setDate(currentDate.getDate() - 1);
-        const dateStr = currentDate.toISOString().split('T')[0];
+        const dateStr = formatLocalDate(currentDate);
 
         if (dateStr === lastReadDate) {
             // Check if there's a continuous chain
