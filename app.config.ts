@@ -15,7 +15,7 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
+      backgroundColor: "#FF6B35",
       foregroundImage: "./assets/images/android-icon-foreground.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -52,9 +52,9 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
         image: "./assets/images/splash-icon.png",
         imageWidth: 200,
         resizeMode: "contain",
-        backgroundColor: "#ffffff",
+        backgroundColor: "#FFF8F0",
         dark: {
-          backgroundColor: "#000000",
+          backgroundColor: "#3D2817",
         },
       },
     ],

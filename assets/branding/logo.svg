@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1770 420" width="1770" height="420">
+  <title>bookApp logo</title>
+  <!-- The wordmark uses the Modak font (assets/fonts/Modak-Regular.ttf); install it to preview this file. -->
+  <defs>
+    <clipPath id="round"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+  <g transform="translate(10 10) scale(0.78125)">
+    <g clip-path="url(#round)">
+      <rect width="512" height="512" fill="#FF6B35"/>
+      <circle cx="440" cy="500" r="230" fill="#E85A28"/>
+      <g transform="rotate(-16 256 270)"><rect x="141" y="110" width="230" height="300" rx="30" fill="#00BFA5"/></g>
+      <g transform="rotate(10 256 270)"><rect x="141" y="110" width="230" height="300" rx="30" fill="#FFF1DE"/></g>
+      <rect x="141" y="110" width="230" height="300" rx="30" fill="#FFFFFF"/>
+      <path d="M256 242 C232 224 196 222 176 230 L176 328 C196 320 232 322 256 340 Z" fill="#FF6B35"/>
+      <path d="M256 242 C280 224 316 222 336 230 L336 328 C316 320 280 322 256 340 Z" fill="#FF6B35"/>
+      <path d="M256 242 V340" stroke="#FFFFFF" stroke-width="6"/>
+      <path d="M306 110 H344 V178 L325 161 L306 178 Z" fill="#FFD93D"/>
+    </g>
+  </g>
+  <text x="450" y="330" font-family="Modak" font-size="330" letter-spacing="-3"><tspan fill="#3D2817">book</tspan><tspan fill="#E04E14">App</tspan></text>
+</svg>

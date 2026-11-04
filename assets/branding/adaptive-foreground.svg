@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1024" height="1024">
+  <title>bookApp Android adaptive icon, foreground layer</title>
+  <!-- Art is scaled to 80% and centred so it stays inside Android's adaptive-icon safe zone. -->
+  <g transform="translate(256 256) scale(0.8) translate(-256 -270)">
+    <g transform="rotate(-16 256 270)"><rect x="141" y="110" width="230" height="300" rx="30" fill="#00BFA5"/></g>
+    <g transform="rotate(10 256 270)"><rect x="141" y="110" width="230" height="300" rx="30" fill="#FFF1DE"/></g>
+    <rect x="141" y="110" width="230" height="300" rx="30" fill="#FFFFFF"/>
+    <path d="M256 242 C232 224 196 222 176 230 L176 328 C196 320 232 322 256 340 Z" fill="#FF6B35"/>
+    <path d="M256 242 C280 224 316 222 336 230 L336 328 C316 320 280 322 256 340 Z" fill="#FF6B35"/>
+    <path d="M256 242 V340" stroke="#FFFFFF" stroke-width="6"/>
+    <path d="M306 110 H344 V178 L325 161 L306 178 Z" fill="#FFD93D"/>
+  </g>
+</svg>
