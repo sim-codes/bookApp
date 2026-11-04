@@ -23,15 +23,12 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
-    // Books come from the system document picker (no storage permission needed)
-    // and the app never records audio, so only keep what's actually used.
-    permissions: ["android.permission.ACCESS_NETWORK_STATE"],
-    // react-native-blob-util's config plugin adds these; the app only reads
-    // files from its own directories, so they're not needed.
-    blockedPermissions: [
+    // RECORD_AUDIO is intentionally not requested: the app never records audio.
+    permissions: [
       "android.permission.READ_EXTERNAL_STORAGE",
       "android.permission.WRITE_EXTERNAL_STORAGE",
       "android.permission.DOWNLOAD_WITHOUT_NOTIFICATION",
+      "android.permission.ACCESS_NETWORK_STATE",
     ],
     package: "com.sim_codes.bookApp",
   },
