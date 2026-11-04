@@ -93,7 +93,10 @@ export default function ReaderScreen() {
             try {
                 setLoading(true);
 
-                let currentBook = book;
+                // Read the book once on open. This effect must NOT depend on `book`:
+                // every progress save updates the store, which would re-run this
+                // effect, flash the loading screen and remount the PDF/EPUB view.
+                let currentBook = bookId ? useBooksStore.getState().books[bookId] : null;
                 if (!currentBook && bookId) {
                     currentBook = await booksStorage.get(bookId);
                 }
@@ -141,7 +144,8 @@ export default function ReaderScreen() {
         };
 
         loadBookContent();
-    }, [bookId, book]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [bookId]);
 
     useEffect(() => {
         return () => {
@@ -178,10 +182,14 @@ export default function ReaderScreen() {
 
             if (bookId) {
                 try {
+                    // Each format tracks position differently; a total of 0 means
+                    // "not loaded yet", which must never count as completed.
                     const isCompleted =
                         fileType === 'pdf'
-                            ? currentPageIndex >= pdfPageCount - 1
-                            : currentPageIndex >= pages.length - 1;
+                            ? pdfPageCount > 0 && currentPageIndex >= pdfPageCount - 1
+                            : fileType === 'epub'
+                            ? epubTotalPositions > 0 && epubCurrentPosition >= epubTotalPositions
+                            : pages.length > 0 && currentPageIndex >= pages.length - 1;
 
                     await updateBook(bookId, {
                         currentPage: fileType === 'epub' ? epubCurrentPosition : currentPageIndex,

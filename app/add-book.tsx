@@ -1,5 +1,6 @@
 import { Toast } from '@/components/reader/Toast';
 import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { bookFiles } from '@/services';
 import { useBooksStore } from '@/stores';
 import { Book } from '@/types';
 import { generateId } from '@/utils';
@@ -124,21 +125,28 @@ export default function AddBookScreen() {
 
         setIsLoading(true);
 
+        const bookId = generateId();
+        let storedFileUri: string | undefined;
+        let storedCoverUri: string | undefined;
+
         try {
-            const fileType = getFileType(fileName);
+            // Picker URIs live in the cache directory and can be purged by the OS,
+            // so copy the book (and cover) into permanent app storage first.
+            storedFileUri = await bookFiles.persistBook(fileUri, fileName, bookId);
+            storedCoverUri = coverUri ? await bookFiles.persistCover(coverUri, bookId) : undefined;
+
             const newBook: Book = {
-                id: generateId(),
+                id: bookId,
                 title: title.trim(),
                 author: author.trim() || 'Unknown Author',
                 genre: selectedGenre || 'Unknown',
-                coverUri: coverUri || undefined,
-                fileUri,
+                coverUri: storedCoverUri,
+                fileUri: storedFileUri,
                 fileName,
                 totalPages: Math.floor(Math.random() * 400) + 50,
                 currentPage: 0,
                 status: 'reading',
                 addedDate: new Date().toISOString().split('T')[0],
-                epubLocator: fileType === 'epub' ? '{}' : undefined,
             };
 
             await addBook(newBook);
@@ -147,6 +155,8 @@ export default function AddBookScreen() {
                 router.back();
             }, 1500);
         } catch (error) {
+            // Don't leave orphaned copies behind if saving failed part-way.
+            await bookFiles.remove(storedFileUri, storedCoverUri);
             showToast('Failed to add book. Please try again.', 'error');
             console.error(error);
         } finally {

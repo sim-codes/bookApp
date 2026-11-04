@@ -1,4 +1,4 @@
-import { booksStorage, progressStorage } from '@/services';
+import { bookFiles, booksStorage, progressStorage } from '@/services';
 import { Book, LocalLibrary } from '@/types';
 import { generateId } from '@/utils';
 import { create } from 'zustand';
@@ -60,8 +60,10 @@ export const useBooksStore = create<BooksStore>((set, get) => ({
 
     deleteBook: async (bookId) => {
         try {
+            const book = get().books[bookId];
             await booksStorage.delete(bookId);
             await progressStorage.delete(bookId);
+            await bookFiles.remove(book?.fileUri, book?.coverUri);
             set((state) => {
                 const newBooks = { ...state.books };
                 delete newBooks[bookId];

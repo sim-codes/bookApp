@@ -43,7 +43,13 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
 
     const [epubLocator, setEpubLocator] = useState<Locator | null>(() => {
         if (!initialLocator) return null;
-        try { return JSON.parse(initialLocator); } catch { return null; }
+        try {
+            const parsed = JSON.parse(initialLocator);
+            // Older entries may hold an empty '{}' locator, which can't be navigated to.
+            return parsed?.href ? parsed : null;
+        } catch {
+            return null;
+        }
     });
     const [epubTotalPositions, setEpubTotalPositions] = useState(0);
     const [epubCurrentPosition, setEpubCurrentPosition] = useState(0);
