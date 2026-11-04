@@ -10,7 +10,6 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
   icon: "./assets/images/icon.png",
   scheme: "bookapp",
   userInterfaceStyle: "automatic",
-  newArchEnabled: true,
   ios: {
     supportsTablet: true,
   },
@@ -21,7 +20,6 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
     },
-    edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     // RECORD_AUDIO is intentionally not requested: the app never records audio.
     permissions: [

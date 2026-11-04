@@ -31,6 +31,15 @@ interface ToastConfig {
     type: 'error' | 'success' | 'info';
 }
 
+const splitIntoPages = (content: string): string[] => {
+    const charsPerPage = 1500;
+    const pageArray: string[] = [];
+    for (let i = 0; i < content.length; i += charsPerPage) {
+        pageArray.push(content.substring(i, i + charsPerPage));
+    }
+    return pageArray.length > 0 ? pageArray : [''];
+};
+
 export default function ReaderScreen() {
     const router = useRouter();
     const { bookId } = useLocalSearchParams<{ bookId: string }>();
@@ -156,6 +165,12 @@ export default function ReaderScreen() {
         };
     }, []);
 
+    const handleStartReading = () => {
+        startSession(bookId!, currentPageIndex);
+        setIsReading(true);
+        showToast('Reading session started', 'success');
+    };
+
     // Start the session automatically once, when the book has loaded. Guarded by a
     // ref so ending a session (isReading -> false) doesn't immediately restart it.
     const autoStartedRef = useRef(false);
@@ -166,21 +181,6 @@ export default function ReaderScreen() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fileType, loading, bookId]);
-
-    const splitIntoPages = (content: string): string[] => {
-        const charsPerPage = 1500;
-        const pageArray: string[] = [];
-        for (let i = 0; i < content.length; i += charsPerPage) {
-            pageArray.push(content.substring(i, i + charsPerPage));
-        }
-        return pageArray.length > 0 ? pageArray : [''];
-    };
-
-    const handleStartReading = () => {
-        startSession(bookId!, currentPageIndex);
-        setIsReading(true);
-        showToast('Reading session started', 'success');
-    };
 
     const handleEndReading = async () => {
         try {

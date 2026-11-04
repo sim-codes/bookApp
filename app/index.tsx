@@ -1,8 +1,7 @@
 import { BookCard, FloatingMenu, StreakDisplay } from '@/components';
 import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
 import { useBooksStore, useReadingStore } from '@/stores';
-import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
