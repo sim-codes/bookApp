@@ -81,7 +81,7 @@ export default function AddBookScreen() {
                 setFileName(asset.name || 'book-file');
                 showToast(`${fileType.toUpperCase()} file selected`, 'success');
             }
-        } catch (error) {
+        } catch {
             showToast('Failed to pick file', 'error');
         }
     };
@@ -106,7 +106,7 @@ export default function AddBookScreen() {
                 setCoverUri(result.assets[0].uri);
                 showToast('Cover image selected', 'success');
             }
-        } catch (error) {
+        } catch {
             showToast('Failed to pick image', 'error');
         }
     };

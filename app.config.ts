@@ -23,12 +23,15 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
-    permissions: [
+    // Books come from the system document picker (no storage permission needed)
+    // and the app never records audio, so only keep what's actually used.
+    permissions: ["android.permission.ACCESS_NETWORK_STATE"],
+    // react-native-blob-util's config plugin adds these; the app only reads
+    // files from its own directories, so they're not needed.
+    blockedPermissions: [
       "android.permission.READ_EXTERNAL_STORAGE",
       "android.permission.WRITE_EXTERNAL_STORAGE",
       "android.permission.DOWNLOAD_WITHOUT_NOTIFICATION",
-      "android.permission.ACCESS_NETWORK_STATE",
-      "android.permission.RECORD_AUDIO",
     ],
     package: "com.sim_codes.bookApp",
   },
@@ -64,7 +67,8 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       "expo-image-picker",
       {
         photosPermission:
-          "The app accesses your photos to let you share them with your friends.",
+          "bookApp accesses your photos so you can pick a cover image for your books.",
+        microphonePermission: false,
         colors: {
           cropToolbarColor: "#000000",
         },

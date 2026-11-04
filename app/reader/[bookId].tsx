@@ -62,8 +62,8 @@ export default function ReaderScreen() {
 
     // PDF refs
     const pdfReaderRef = useRef<any>(null);
-    const navigationDebounceRef = useRef<number | null>(null);
-    const pdfPageChangeDebounceRef = useRef<number | null>(null);
+    const navigationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pdfPageChangeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastPdfPageRef = useRef(0);
     const savedInitialPageRef = useRef(0);
     const pdfLoadedRef = useRef(false);
