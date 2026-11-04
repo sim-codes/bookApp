@@ -59,7 +59,7 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
 
     const readiumRef = useRef<ReadiumViewRef>(null);
     const epubLocatorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const drawerAnim = useRef(new Animated.Value(-350)).current;
+    const [drawerAnim] = useState(() => new Animated.Value(-350));
 
     // Expose actions to parent via ref — no state updates in parent render
     useImperativeHandle(ref, () => ({

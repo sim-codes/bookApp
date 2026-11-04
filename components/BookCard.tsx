@@ -1,7 +1,7 @@
 import { BorderRadius, Colors, Shadows, Spacing, TextStyles } from '@/constants';
 import { BookCardProps } from '@/types';
 import { toTitleCase } from '@/utils';
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, Image, PanResponder, StyleSheet, Text, View } from 'react-native';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -20,7 +20,14 @@ export function BookCard({
     onSwipeUp,
     style,
 }: BookCardProps) {
-    const pan = useRef(new Animated.ValueXY()).current;
+    const [pan] = useState(() => new Animated.ValueXY());
+
+    // The PanResponder is created once, so it reads the latest swipe callbacks
+    // from a ref instead of capturing the ones from the first render.
+    const swipeCallbacks = useRef({ onSwipeRight, onSwipeLeft, onSwipeUp });
+    useEffect(() => {
+        swipeCallbacks.current = { onSwipeRight, onSwipeLeft, onSwipeUp };
+    });
 
     // Dynamic rotation: card tilts as it's dragged left/right
     const dynamicRotation = pan.x.interpolate({
@@ -36,37 +43,41 @@ export function BookCard({
         extrapolate: 'clamp',
     });
 
-    const forceSwipe = (direction: 'left' | 'right' | 'up') => {
-        let toValue = { x: 0, y: 0 };
+    const panResponder = useMemo(() => {
+        const forceSwipe = (direction: 'left' | 'right' | 'up') => {
+            let toValue = { x: 0, y: 0 };
 
-        if (direction === 'right') toValue = { x: SCREEN_WIDTH * 1.5, y: 0 };
-        else if (direction === 'left') toValue = { x: -SCREEN_WIDTH * 1.5, y: 0 };
-        else if (direction === 'up') toValue = { x: 0, y: -SCREEN_WIDTH * 1.5 };
+            if (direction === 'right') toValue = { x: SCREEN_WIDTH * 1.5, y: 0 };
+            else if (direction === 'left') toValue = { x: -SCREEN_WIDTH * 1.5, y: 0 };
+            else if (direction === 'up') toValue = { x: 0, y: -SCREEN_WIDTH * 1.5 };
 
-        Animated.timing(pan, {
-            toValue,
-            duration: SWIPE_OUT_DURATION,
-            useNativeDriver: false,
-        }).start(() => {
-            // Reset position after callback
-            pan.setValue({ x: 0, y: 0 });
-            if (direction === 'right') onSwipeRight?.();
-            else if (direction === 'left') onSwipeLeft?.();
-            else if (direction === 'up') onSwipeUp?.();
-        });
-    };
+            Animated.timing(pan, {
+                toValue,
+                duration: SWIPE_OUT_DURATION,
+                useNativeDriver: false,
+            }).start(() => {
+                // Reset position after callback
+                pan.setValue({ x: 0, y: 0 });
+                const callbacks = swipeCallbacks.current;
+                if (direction === 'right') callbacks.onSwipeRight?.();
+                else if (direction === 'left') callbacks.onSwipeLeft?.();
+                else if (direction === 'up') callbacks.onSwipeUp?.();
+            });
+        };
 
-    const resetPosition = () => {
-        Animated.spring(pan, {
-            toValue: { x: 0, y: 0 },
-            friction: 5,
-            tension: 40,
-            useNativeDriver: false,
-        }).start();
-    };
+        const resetPosition = () => {
+            Animated.spring(pan, {
+                toValue: { x: 0, y: 0 },
+                friction: 5,
+                tension: 40,
+                useNativeDriver: false,
+            }).start();
+        };
 
-    const panResponder = useRef(
-        PanResponder.create({
+        // The ref is only read inside the gesture callbacks (after render), never
+        // during render, so the "ref read during render" warning is a false positive.
+        // eslint-disable-next-line react-hooks/refs
+        return PanResponder.create({
             onStartShouldSetPanResponder: () => true,
             onMoveShouldSetPanResponder: () => true,
             onPanResponderMove: Animated.event(
@@ -84,8 +95,8 @@ export function BookCard({
                     resetPosition();
                 }
             },
-        })
-    ).current;
+        });
+    }, [pan]);
 
     return (
         <Animated.View

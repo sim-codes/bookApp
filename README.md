@@ -229,17 +229,17 @@ The app uses **imperative ref-based control** for PDF navigation instead of prop
 
 | Layer | Technology | Version |
 |-------|-----------|---------|
-| **Framework** | React Native | 0.81.5 |
-| **Platform** | Expo | ~54.0.33 |
+| **Framework** | React Native | 0.88.1 |
+| **Platform** | Expo | ~58.0.23 |
 | **Language** | TypeScript | 5.9.2 |
-| **Navigation** | Expo Router | ~6.0.23 |
-| **State** | Zustand | ^5.0.12 |
+| **Navigation** | Expo Router | ~58.0.30 |
+| **State** | Zustand | ^5.0.16 |
 | **Storage** | AsyncStorage | ^2.2.0 |
-| **PDF** | react-native-pdf | ^7.0.4 |
-| **File System** | expo-file-system | ~19.0.21 |
+| **PDF** | react-native-pdf | ^7.0.5 |
+| **File System** | expo-file-system | ~58.0.13 |
 | **Icons** | @expo/vector-icons | ^15.0.3 |
-| **UI Feedback** | expo-haptics | ~15.0.8 |
-| **Safe Area** | react-native-safe-area-context | ~5.6.0 |
+| **EPUB** | react-native-readium | ^5.3.0 |
+| **Safe Area** | react-native-safe-area-context | ~5.11.1 |
 
 ## Development Workflow
 
