@@ -1,7 +1,7 @@
 import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
 import { useBooksStore } from '@/stores';
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
     Animated,
     ScrollView,
@@ -10,14 +10,15 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import type { Link, Locator, PublicationReadyEvent, ReadiumViewRef } from 'react-native-readium';
+import type { Link, Locator, Preferences, PublicationReadyEvent, ReadiumViewRef } from 'react-native-readium';
 import { ReadiumView } from 'react-native-readium';
 
 // ─── Imperative handle ────────────────────────────────────────────────────────
 
-export interface EpubReaderHandle {
+export interface ReadiumReaderHandle {
     goForward: () => void;
     goBackward: () => void;
+    goToPosition: (position: number) => void;
     openToc: () => void;
     increaseFontSize: () => void;
     decreaseFontSize: () => void;
@@ -25,23 +26,26 @@ export interface EpubReaderHandle {
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface EpubReaderProps {
+interface ReadiumReaderProps {
     fileUri: string;
     bookId: string;
+    format: 'epub' | 'pdf';
     initialLocator: string | null;
+    initialPosition?: number;
+    scrollAxis?: 'horizontal' | 'vertical';
     onPositionChange: (current: number, total: number) => void;
     onToast: (message: string, type: 'error' | 'success' | 'info') => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function EpubReader(
-    { fileUri, bookId, initialLocator, onPositionChange, onToast },
+export const ReadiumReader = forwardRef<ReadiumReaderHandle, ReadiumReaderProps>(function ReadiumReader(
+    { fileUri, bookId, format, initialLocator, initialPosition, scrollAxis = 'vertical', onPositionChange, onToast },
     ref,
 ) {
     const { updateBook } = useBooksStore();
 
-    const [epubLocator, setEpubLocator] = useState<Locator | null>(() => {
+    const [locator, setLocator] = useState<Locator | null>(() => {
         if (!initialLocator) return null;
         try {
             const parsed = JSON.parse(initialLocator);
@@ -51,24 +55,34 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
             return null;
         }
     });
-    const [epubTotalPositions, setEpubTotalPositions] = useState(0);
-    const [epubCurrentPosition, setEpubCurrentPosition] = useState(0);
-    const [epubFontSize, setEpubFontSize] = useState(1);
+    const [totalPositions, setTotalPositions] = useState(0);
+    const [currentPosition, setCurrentPosition] = useState(0);
+    const [fontSize, setFontSize] = useState(1);
     const [tableOfContents, setTableOfContents] = useState<Link[]>([]);
     const [showTocModal, setShowTocModal] = useState(false);
 
     const readiumRef = useRef<ReadiumViewRef>(null);
-    const epubLocatorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const positionsRef = useRef<Locator[]>([]);
+    const locatorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [drawerAnim] = useState(() => new Animated.Value(-350));
+
+    const preferences: Preferences =
+        format === 'pdf' ? { scroll: true, scrollAxis } : { fontSize };
+
+    const goToPosition = useCallback((position: number) => {
+        const target = positionsRef.current[position - 1];
+        if (target) readiumRef.current?.goTo(target);
+    }, []);
 
     // Expose actions to parent via ref — no state updates in parent render
     useImperativeHandle(ref, () => ({
         goForward: () => readiumRef.current?.goForward(),
         goBackward: () => readiumRef.current?.goBackward(),
+        goToPosition,
         openToc: () => setShowTocModal(true),
-        increaseFontSize: () => setEpubFontSize(prev => Math.min(2, prev + 0.25)),
-        decreaseFontSize: () => setEpubFontSize(prev => Math.max(0.75, prev - 0.25)),
-    }), []);
+        increaseFontSize: () => setFontSize(prev => Math.min(2, prev + 0.25)),
+        decreaseFontSize: () => setFontSize(prev => Math.max(0.75, prev - 0.25)),
+    }), [goToPosition]);
 
     // Keep the latest callback in a ref so the parent can pass an inline function
     // without re-triggering the position effect on every render.
@@ -78,8 +92,8 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
     });
 
     useEffect(() => {
-        onPositionChangeRef.current(epubCurrentPosition, epubTotalPositions);
-    }, [epubCurrentPosition, epubTotalPositions]);
+        onPositionChangeRef.current(currentPosition, totalPositions);
+    }, [currentPosition, totalPositions]);
 
     useEffect(() => {
         Animated.timing(drawerAnim, {
@@ -91,26 +105,29 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
 
     useEffect(() => {
         return () => {
-            if (epubLocatorDebounceRef.current) clearTimeout(epubLocatorDebounceRef.current);
+            if (locatorDebounceRef.current) clearTimeout(locatorDebounceRef.current);
         };
     }, []);
 
     const handleLocationChange = (locator: Locator) => {
         const pos = locator?.locations?.position ?? 0;
-        setEpubCurrentPosition(pos);
-        setEpubLocator(locator);
-        if (epubLocatorDebounceRef.current) clearTimeout(epubLocatorDebounceRef.current);
-        epubLocatorDebounceRef.current = setTimeout(() => {
+        setCurrentPosition(pos);
+        setLocator(locator);
+        if (locatorDebounceRef.current) clearTimeout(locatorDebounceRef.current);
+        locatorDebounceRef.current = setTimeout(() => {
             updateBook(bookId, { epubLocator: JSON.stringify(locator) }).catch(console.error);
         }, 500);
     };
 
     const handlePublicationReady = (event: PublicationReadyEvent) => {
-        const total = event.positions?.length ?? 0;
-        setEpubTotalPositions(total);
+        positionsRef.current = event.positions ?? [];
+        const total = positionsRef.current.length;
+        setTotalPositions(total);
         setTableOfContents(event.tableOfContents ?? []);
-        if (epubLocator && readiumRef.current?.goTo) {
-            setTimeout(() => readiumRef.current?.goTo(epubLocator!), 500);
+        if (locator && readiumRef.current?.goTo) {
+            setTimeout(() => readiumRef.current?.goTo(locator!), 500);
+        } else if (initialPosition && initialPosition > 1) {
+            setTimeout(() => goToPosition(initialPosition), 500);
         }
     };
 
@@ -125,7 +142,7 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
             <ReadiumView
                 ref={readiumRef}
                 file={{ url: fileUri }}
-                preferences={{ fontSize: epubFontSize }}
+                preferences={preferences}
                 onLocationChange={handleLocationChange}
                 onPublicationReady={handlePublicationReady}
                 style={styles.readiumView}
@@ -199,29 +216,29 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
 // ─── Navigation Bar ───────────────────────────────────────────────────────────
 
 interface EpubNavigationBarProps {
-    epubRef: React.RefObject<EpubReaderHandle | null>;
+    readerRef: React.RefObject<ReadiumReaderHandle | null>;
 }
 
-export function EpubNavigationBar({ epubRef }: EpubNavigationBarProps) {
+export function EpubNavigationBar({ readerRef }: EpubNavigationBarProps) {
     return (
         <View style={styles.epubNavigation}>
-            <TouchableOpacity style={styles.epubNavBtn} onPress={() => epubRef.current?.openToc()}>
+            <TouchableOpacity style={styles.epubNavBtn} onPress={() => readerRef.current?.openToc()}>
                 <MaterialIcons name="menu-book" size={20} color={Colors.primary} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.epubNavBtn} onPress={() => epubRef.current?.decreaseFontSize()}>
+            <TouchableOpacity style={styles.epubNavBtn} onPress={() => readerRef.current?.decreaseFontSize()}>
                 <Text style={styles.fontSizeLabel}>A−</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.epubNavBtn} onPress={() => epubRef.current?.increaseFontSize()}>
+            <TouchableOpacity style={styles.epubNavBtn} onPress={() => readerRef.current?.increaseFontSize()}>
                 <Text style={[styles.fontSizeLabel, styles.fontSizeLabelLg]}>A+</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.epubNavBtn} onPress={() => epubRef.current?.goBackward()}>
+            <TouchableOpacity style={styles.epubNavBtn} onPress={() => readerRef.current?.goBackward()}>
                 <MaterialIcons name="arrow-back-ios" size={20} color={Colors.primary} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.epubNavBtn} onPress={() => epubRef.current?.goForward()}>
+            <TouchableOpacity style={styles.epubNavBtn} onPress={() => readerRef.current?.goForward()}>
                 <MaterialIcons name="arrow-forward-ios" size={20} color={Colors.primary} />
             </TouchableOpacity>
         </View>

@@ -1,7 +1,7 @@
 import { ConfigPlugin, withAppBuildGradle, createRunOncePlugin } from 'expo/config-plugins';
 
 const DESUGARING_DEPENDENCY =
-  'coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.2"';
+  'coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"';
 
 const KOTLINX_DATETIME_DEPENDENCY =
   'implementation "org.jetbrains.kotlinx:kotlinx-datetime:0.7.1-0.6.x-compat"';
