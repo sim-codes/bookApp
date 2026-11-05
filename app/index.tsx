@@ -76,12 +76,6 @@ export default function HomeScreen() {
       icon: 'settings',
       onPress: () => router.push('/settings'),
     },
-    {
-      id: 'login',
-      label: 'Login',
-      icon: 'login',
-      onPress: () => router.push('/auth/login'),
-    },
   ], [router]);
 
   return (
