@@ -1,4 +1,4 @@
-import { Colors, PRIVACY_POLICY_URL, Spacing, TextStyles } from '@/constants';
+import { Colors, PRIVACY_POLICY_URL, Spacing, TextStyles, Typography } from '@/constants';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -101,6 +101,6 @@ const styles = StyleSheet.create({
     link: {
         ...TextStyles.body,
         color: Colors.primary,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
 });

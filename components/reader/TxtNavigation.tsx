@@ -1,4 +1,4 @@
-import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, Spacing, TextStyles, Typography } from '@/constants';
 import { MaterialIcons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     pageIndicator: {
         ...TextStyles.bodySmall,
         color: Colors.textLight,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
         minWidth: 40,
         textAlign: 'center',
     },

@@ -1,4 +1,4 @@
-import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, Spacing, TextStyles, Typography } from '@/constants';
 import { Book } from '@/types';
 import { bookProgress, toTitleCase } from '@/utils';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     title: {
         ...TextStyles.body,
         color: Colors.textDark,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     author: {
         ...TextStyles.bodySmall,

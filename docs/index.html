@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Spinematch</title>
+    <meta name="description" content="Swipe through your books, pick your next read and keep a daily reading streak.">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Modak&display=swap">
+    <style>
+        :root {
+            --text: #1A1A1A; --muted: #595959; --accent: #FF6B35; --accent-dark: #9A3412;
+            --brown: #3D2817; --bg: #FFF8F0; --card: #FFFFFF; --teal: #00695C; --deep-teal: #0F4C5C;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Poppins, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
+        a { color: var(--accent-dark); }
+        a:hover { color: var(--brown); }
+
+        .blob { position: absolute; border-radius: 50%; z-index: 0; pointer-events: none; }
+        .blob-orange { width: 420px; height: 420px; background: #FFE3D6; top: -140px; right: -120px; }
+        .blob-teal { width: 360px; height: 360px; background: #D7F5F0; top: 420px; left: -180px; }
+
+        header, main, footer { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
+        header { display: flex; align-items: center; gap: 12px; padding-top: 24px; }
+        header img { width: 40px; height: 40px; border-radius: 10px; }
+        .wordmark { font-family: Modak, Poppins, sans-serif; font-size: 32px; line-height: 1; color: var(--brown); }
+
+        .hero { display: flex; flex-wrap: wrap; align-items: center; gap: 48px; padding: 48px 0 24px; }
+        .hero-text { flex: 1 1 360px; }
+        .eyebrow { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--accent-dark); }
+        h1 { margin: 8px 0 0; font-family: Modak, Poppins, sans-serif; font-weight: 400; font-size: clamp(48px, 8vw, 76px); line-height: 0.95; color: var(--brown); }
+        .lede { margin: 20px 0 0; font-size: 19px; color: var(--muted); max-width: 30ch; }
+        .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+        .pill { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 999px; font-weight: 600; font-size: 15px; }
+        .pill-dark { background: var(--brown); color: #FFF8F0; }
+        .pill-light { background: var(--card); color: var(--teal); }
+
+        .phone-wrap { flex: 0 1 340px; margin: 0 auto; display: flex; justify-content: center; }
+        .phone { width: 300px; height: 620px; border-radius: 44px; background: var(--text); padding: 12px; box-shadow: 0 30px 60px rgba(61, 40, 23, 0.25); transform: rotate(2deg); }
+        .screen { width: 100%; height: 100%; border-radius: 34px; overflow: hidden; background: var(--bg); position: relative; display: flex; flex-direction: column; padding: 30px 16px 18px; gap: 12px; }
+        .screen-top { display: flex; align-items: center; justify-content: space-between; }
+        .screen-top .wordmark { font-size: 24px; }
+        .avatar { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--accent); background: #FFE3D6; display: flex; align-items: center; justify-content: center; }
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: var(--card); font-size: 11px; font-weight: 600; }
+        .chip-streak { color: var(--accent-dark); }
+        .chip-time { color: var(--teal); }
+        .deck { position: relative; flex: 1; margin-top: 4px; }
+        .card { position: absolute; left: 50%; border-radius: 18px; overflow: hidden; }
+        .card-back { width: 200px; height: 300px; top: 14px; margin-left: -100px; background: var(--deep-teal); opacity: 0.45; }
+        .card-front { width: 222px; height: 330px; top: 0; margin-left: -111px; background: var(--brown); box-shadow: 0 12px 24px rgba(26,26,26,0.22); }
+        .spine { position: absolute; left: 16px; top: 0; bottom: 0; width: 2px; background: var(--accent); opacity: 0.6; }
+        .cover-text { position: absolute; left: 32px; right: 18px; top: 86px; display: flex; flex-direction: column; gap: 8px; }
+        .rule { width: 30px; height: 3px; border-radius: 2px; background: var(--accent); }
+        .cover-title { margin: 0; font-size: 22px; line-height: 1.25; font-weight: 600; color: #FFF8F0; }
+        .cover-author { margin: 0; font-size: 10px; letter-spacing: 2px; color: #FFF8F0; opacity: 0.85; }
+        .badge { position: absolute; top: 12px; right: 12px; padding: 3px 9px; border-radius: 999px; background: var(--accent); color: #FFFFFF; font-size: 10px; font-weight: 600; }
+        .card-band { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 0 12px; background: rgba(0,0,0,0.55); text-align: center; font-size: 10px; color: rgba(255,255,255,0.8); }
+        .card-progress { position: absolute; left: 0; bottom: 0; height: 3px; width: 42%; background: var(--accent); }
+        .actions { display: flex; justify-content: center; align-items: flex-end; gap: 22px; }
+        .action { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; color: var(--muted); }
+        .circle { border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--card); box-shadow: 0 6px 14px rgba(26,26,26,0.12); width: 44px; height: 44px; }
+        .circle-primary { width: 54px; height: 54px; background: var(--accent); box-shadow: 0 8px 18px rgba(255,107,53,0.4); }
+        .action-primary { color: var(--accent-dark); }
+
+        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; padding: 40px 0 0; }
+        .feature { background: var(--card); border-radius: 24px; padding: 28px; }
+        .icon-tile { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; }
+        .tile-orange { background: #FFE3D6; }
+        .tile-teal { background: #D7F5F0; }
+        .tile-brown { background: #F1E7DD; }
+        h2 { margin: 18px 0 6px; font-size: 19px; font-weight: 600; }
+        .feature p { margin: 0; color: var(--muted); font-size: 15px; }
+
+        .promise { margin: 24px 0 0; padding: 22px 26px; border-radius: 24px; background: var(--brown); color: #FFF8F0; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; font-size: 16px; }
+
+        footer { display: flex; flex-wrap: wrap; gap: 20px; padding-top: 32px; padding-bottom: 48px; color: var(--muted); font-size: 14px; }
+        footer span { margin-right: auto; }
+
+        @media (max-width: 720px) {
+            .hero { padding-top: 32px; gap: 40px; }
+            .phone { transform: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="blob blob-orange" aria-hidden="true"></div>
+<div class="blob blob-teal" aria-hidden="true"></div>
+
+<header>
+    <img src="icon.svg" alt="">
+    <span class="wordmark">Spinematch</span>
+</header>
+
+<main>
+    <section class="hero">
+        <div class="hero-text">
+            <p class="eyebrow">Your reading, one swipe away</p>
+            <h1>Swipe your shelf. Find your next read.</h1>
+            <p class="lede">Your books in a card deck. Swipe right to read, skip what can wait, and keep your streak going.</p>
+            <div class="cta">
+                <span class="pill pill-dark">Coming soon to Google Play</span>
+                <span class="pill pill-light">EPUB · PDF · TXT</span>
+            </div>
+        </div>
+
+        <div class="phone-wrap">
+            <div class="phone" role="img" aria-label="Spinematch home screen showing a book card deck with Skip, Read and Add buttons">
+                <div class="screen" aria-hidden="true">
+                    <div class="screen-top">
+                        <span class="wordmark">Spinematch</span>
+                        <span class="avatar">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A3412" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>
+                        </span>
+                    </div>
+                    <div class="chips">
+                        <span class="chip chip-streak">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF6B35" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3 4 4.5 4 8.5a4 4 0 0 1-8 0C8 9 9.5 8 10 6c.8 1.4 1.5 2 2 2 0-2 0-3.5 0-5z"></path></svg>
+                            5-day streak
+                        </span>
+                        <span class="chip chip-time">3.5 h read</span>
+                    </div>
+                    <div class="deck">
+                        <div class="card card-back"></div>
+                        <div class="card card-front">
+                            <div class="spine"></div>
+                            <div class="cover-text">
+                                <div class="rule"></div>
+                                <p class="cover-title">The Midnight Library</p>
+                                <p class="cover-author">MATT HAIG</p>
+                            </div>
+                            <span class="badge">42%</span>
+                            <div class="card-band">← Swipe right to read →</div>
+                            <div class="card-progress"></div>
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <div class="action">
+                            <span class="circle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3D2817" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span>
+                            Skip
+                        </div>
+                        <div class="action action-primary">
+                            <span class="circle circle-primary"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2z"></path><path d="M22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"></path></svg></span>
+                            Read
+                        </div>
+                        <div class="action">
+                            <span class="circle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3D2817" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+                            Add
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features" aria-label="Features">
+        <article class="feature">
+            <div class="icon-tile tile-orange">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FF6B35" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="13" height="17" rx="2"></rect><path d="M3 7v12a2 2 0 0 0 2 2h10"></path></svg>
+            </div>
+            <h2>Swipe your shelf</h2>
+            <p>Your books sit in a card deck. Swipe right to start reading, left to see the next one, or tap the buttons below the card.</p>
+        </article>
+        <article class="feature">
+            <div class="icon-tile tile-teal">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#00695C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2z"></path><path d="M22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"></path></svg>
+            </div>
+            <h2>Covers and details, filled in</h2>
+            <p>Add an EPUB, PDF or TXT and its title, author and cover are read from the file. Pick up right where you left off.</p>
+        </article>
+        <article class="feature">
+            <div class="icon-tile tile-brown">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3D2817" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3c1 3 4 4.5 4 8.5a4 4 0 0 1-8 0C8 9 9.5 8 10 6c.8 1.4 1.5 2 2 2 0-2 0-3.5 0-5z"></path></svg>
+            </div>
+            <h2>Keep your streak</h2>
+            <p>Reading time is tracked automatically every time you open a book, so your daily streak takes care of itself.</p>
+        </article>
+    </section>
+
+    <p class="promise">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF6B35" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+        Your books and reading history stay on your device. No accounts, no ads, no tracking.
+    </p>
+</main>
+
+<footer>
+    <span>© 2026 Spinematch</span>
+    <a href="privacy.html">Privacy Policy</a>
+    <a href="https://github.com/sim-codes/bookApp/issues">Contact</a>
+</footer>
+</body>
+</html>

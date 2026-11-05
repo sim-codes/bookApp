@@ -1,4 +1,4 @@
-import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, Spacing, TextStyles, Typography } from '@/constants';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ComponentProps } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     label: {
         ...TextStyles.body,
         color: Colors.textDark,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
         marginBottom: Spacing.md,
     },
     preview: {
@@ -77,6 +77,6 @@ const styles = StyleSheet.create({
     buttonText: {
         ...TextStyles.bodySmall,
         color: Colors.primary,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
 });

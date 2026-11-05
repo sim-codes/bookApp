@@ -1,6 +1,6 @@
-import { BookDetailsFields, CoverAction, CoverEditor } from '@/components/book';
+import { BookDetailsFields, CoverAction, CoverEditor, SharingFields, SharingValue, sharingError } from '@/components/book';
 import { Toast } from '@/components/reader/Toast';
-import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, FEATURES, Spacing, TextStyles, Typography } from '@/constants';
 import { bookFiles, extractBookMetadata } from '@/services';
 import { useBooksStore } from '@/stores';
 import { Book } from '@/types';
@@ -33,6 +33,7 @@ export default function AddBookScreen() {
     const [title, setTitle] = useState('');
     const [author, setAuthor] = useState('');
     const [selectedGenre, setSelectedGenre] = useState('');
+    const [sharing, setSharing] = useState<SharingValue>({ visibility: 'private', access: 'paid', rightsConfirmed: false });
     const [fileCoverUri, setFileCoverUri] = useState<string | null>(null);
     const [customCoverUri, setCustomCoverUri] = useState<string | null>(null);
     const [fileUri, setFileUri] = useState<string | null>(null);
@@ -125,6 +126,12 @@ export default function AddBookScreen() {
             return;
         }
 
+        const sharingProblem = sharingError(sharing);
+        if (sharingProblem) {
+            showToast(sharingProblem, 'error');
+            return;
+        }
+
         setIsLoading(true);
 
         const bookId = generateId();
@@ -150,6 +157,8 @@ export default function AddBookScreen() {
                 totalPages: undefined,
                 currentPage: 0,
                 status: 'reading',
+                visibility: sharing.visibility,
+                access: sharing.visibility === 'public' ? sharing.access : undefined,
                 addedDate: getTodayDate(),
             };
 
@@ -231,6 +240,8 @@ export default function AddBookScreen() {
                     }}
                 />
 
+                {FEATURES.communityLibrary && <SharingFields value={sharing} onChange={setSharing} />}
+
                 {/* Save Button */}
                 <TouchableOpacity
                     style={[styles.saveButton, (isLoading || isReadingFile) && styles.saveButtonDisabled]}
@@ -290,7 +301,7 @@ const styles = StyleSheet.create({
     label: {
         ...TextStyles.body,
         color: Colors.textDark,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
         marginBottom: Spacing.md,
     },
     filePicker: {
@@ -311,7 +322,7 @@ const styles = StyleSheet.create({
     filePickerLabel: {
         ...TextStyles.body,
         color: Colors.textDark,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     filePickerSubtitle: {
         ...TextStyles.caption,
@@ -335,7 +346,6 @@ const styles = StyleSheet.create({
     saveButtonText: {
         ...TextStyles.h4,
         color: Colors.white,
-        fontWeight: '700',
     },
     spacer: {
         height: Spacing.xl,

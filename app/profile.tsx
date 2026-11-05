@@ -1,5 +1,5 @@
 import { BookListItem } from '@/components/book';
-import { Colors, Spacing, TextStyles } from '@/constants';
+import { Colors, Spacing, TextStyles, Typography } from '@/constants';
 import { useBooksStore } from '@/stores';
 import { sortBooksByActivity } from '@/utils';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -23,7 +23,9 @@ export default function ProfileScreen() {
                     <MaterialIcons name="arrow-back" size={24} color={Colors.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Profile</Text>
-                <View style={{ width: 24 }} />
+                <TouchableOpacity onPress={() => router.push('/settings')} accessibilityLabel="Settings">
+                    <MaterialIcons name="settings" size={24} color={Colors.primary} />
+                </TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
@@ -105,6 +107,6 @@ const styles = StyleSheet.create({
     link: {
         ...TextStyles.body,
         color: Colors.primary,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
 });

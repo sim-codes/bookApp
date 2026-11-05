@@ -1,10 +1,5 @@
 import { StyleProp, ViewStyle } from 'react-native';
 
-export interface StreakDisplayProps {
-    streak: number;
-    lastReadDate?: string | null;
-}
-
 export interface BookCardProps {
     title: string;
     author: string;
@@ -15,17 +10,4 @@ export interface BookCardProps {
     onSwipeLeft?: () => void;
     onSwipeUp?: () => void;
     style?: StyleProp<ViewStyle>;
-}
-
-export interface MenuItem {
-    id: string;
-    label: string;
-    icon: string;
-    onPress: () => void;
-}
-
-export interface FloatingMenuProps {
-    items: MenuItem[];
-    open?: boolean;
-    onToggle?: (open: boolean) => void;
 }

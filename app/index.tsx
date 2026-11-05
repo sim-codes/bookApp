@@ -1,10 +1,12 @@
-import { BookCard, FloatingMenu, StreakDisplay } from '@/components';
-import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { BookCard } from '@/components';
+import { DeckActions, LibraryScope, LibraryToggle, ReadingStatChips } from '@/components/home';
+import { BorderRadius, Colors, FEATURES, Spacing, TextStyles } from '@/constants';
 import { useBooksStore, useReadingStore } from '@/stores';
 import { bookProgress, sortBooksByActivity } from '@/utils';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
@@ -12,16 +14,14 @@ export default function HomeScreen() {
   const { books, loadBooks } = useBooksStore();
   const { stats, loadStats } = useReadingStore();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [scope, setScope] = useState<LibraryScope>('mine');
   // Most recent activity first, so a newly added or just-read book tops the deck.
   const bookList = useMemo(() => sortBooksByActivity(Object.values(books)), [books]);
   const currentBook = bookList[currentIndex];
+  const nextBook = bookList.length > 1 ? bookList[(currentIndex + 1) % bookList.length] : undefined;
 
-  // Load data on mount
   useEffect(() => {
-    const initializeApp = async () => {
-      await Promise.all([loadBooks(), loadStats()]);
-    };
-    initializeApp();
+    Promise.all([loadBooks(), loadStats()]);
   }, [loadBooks, loadStats]);
 
   // Reload data when screen focuses (after returning from reader)
@@ -33,107 +33,90 @@ export default function HomeScreen() {
     }, [loadBooks, loadStats])
   );
 
-  const handleSwipeRight = () => {
-    if (currentBook) {
-      router.push(`/reader/${currentBook.id}`);
-    }
+  const openCurrentBook = () => {
+    if (currentBook) router.push(`/reader/${currentBook.id}`);
   };
 
-  const handleSwipeLeft = () => {
-    // Skip to next book
-    if (currentIndex < bookList.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-    } else {
-      setCurrentIndex(0);
-    }
+  const skipToNextBook = () => {
+    setCurrentIndex(index => (index < bookList.length - 1 ? index + 1 : 0));
   };
 
-  const handleSwipeUp = () => {
-    handleSwipeLeft();
-  };
-
-  const menuItems = useMemo(() => [
-    {
-      id: 'add-book',
-      label: 'Add Book',
-      icon: 'add',
-      onPress: () => router.push('/add-book'),
-    },
-    {
-      id: 'profile',
-      label: 'Profile',
-      icon: 'person',
-      onPress: () => router.push('/profile'),
-    },
-    {
-      id: 'settings',
-      label: 'Settings',
-      icon: 'settings',
-      onPress: () => router.push('/settings'),
-    },
-  ], [router]);
+  const showingMine = !FEATURES.communityLibrary || scope === 'mine';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.backgroundBlobTop} />
-      <View style={styles.backgroundBlobBottom} />
-
-      <View style={styles.hero}>
-        <Text style={styles.heroEyebrow}>Your Reading Adventure</Text>
-        <Text style={styles.heroTitle}>Pick Your Next Journey</Text>
-        <Text style={styles.heroSubtitle}>Swipe right to dive in • left/up to skip</Text>
+      <View style={styles.header}>
+        <Text style={styles.wordmark}>Spinematch</Text>
+        <TouchableOpacity
+          style={styles.avatar}
+          onPress={() => router.push('/profile')}
+          accessibilityLabel="Profile and settings"
+        >
+          <MaterialIcons name="person" size={24} color="#9A3412" />
+        </TouchableOpacity>
       </View>
 
-      <View style={styles.streakCard}>
-        <StreakDisplay streak={stats.currentStreak} lastReadDate={stats.lastReadDate} />
-      </View>
-
-      <View style={styles.content}>
-        {bookList.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>📚 The shelf is empty</Text>
-            <Text style={styles.emptySubtitle}>
-              Tap the round button below to add your first book and begin.
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.cardStack}>
-            {/* Next card (peeking from behind) */}
-            {bookList.length > 1 && (
-              <BookCard
-                title={bookList[(currentIndex + 1) % bookList.length]?.title || 'Unknown'}
-                author={bookList[(currentIndex + 1) % bookList.length]?.author || 'Unknown'}
-                coverUri={bookList[(currentIndex + 1) % bookList.length]?.coverUri}
-                progress={bookProgress(bookList[(currentIndex + 1) % bookList.length])}
-                rotation={-3}
-                style={styles.nextCard}
-              />
-            )}
-
-            {/* Current card */}
-            <BookCard
-              key={currentBook?.id}
-              title={currentBook?.title || 'Unknown'}
-              author={currentBook?.author || 'Unknown'}
-              coverUri={currentBook?.coverUri}
-              progress={bookProgress(currentBook)}
-              rotation={3}
-              onSwipeRight={handleSwipeRight}
-              onSwipeLeft={handleSwipeLeft}
-              onSwipeUp={handleSwipeUp}
-              style={styles.currentCard}
-            />
-          </View>
-        )}
-      </View>
-
-      {bookList.length > 0 && (
-        <View style={styles.footer}>
-          <Text style={styles.counterText}>{currentIndex + 1} of {bookList.length}</Text>
+      {FEATURES.communityLibrary && (
+        <View style={styles.toggle}>
+          <LibraryToggle value={scope} onChange={setScope} />
         </View>
       )}
 
-      <FloatingMenu items={menuItems} />
+      {showingMine ? (
+        <>
+          <View style={styles.chips}>
+            <ReadingStatChips streak={stats.currentStreak} totalHours={stats.totalHours} />
+          </View>
+
+          <View style={styles.deck}>
+            {currentBook ? (
+              <View style={styles.cardStack}>
+                {nextBook && (
+                  <BookCard
+                    title={nextBook.title || 'Unknown'}
+                    author={nextBook.author || 'Unknown'}
+                    coverUri={nextBook.coverUri}
+                    progress={bookProgress(nextBook)}
+                    style={styles.nextCard}
+                  />
+                )}
+                <BookCard
+                  key={currentBook.id}
+                  title={currentBook.title || 'Unknown'}
+                  author={currentBook.author || 'Unknown'}
+                  coverUri={currentBook.coverUri}
+                  progress={bookProgress(currentBook)}
+                  onSwipeRight={openCurrentBook}
+                  onSwipeLeft={skipToNextBook}
+                  onSwipeUp={skipToNextBook}
+                  style={styles.currentCard}
+                />
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>Your shelf is empty</Text>
+                <Text style={styles.emptySubtitle}>Tap Add below to bring in your first book.</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.actions}>
+            <DeckActions
+              hasBooks={!!currentBook}
+              onSkip={skipToNextBook}
+              onRead={openCurrentBook}
+              onAdd={() => router.push('/add-book')}
+            />
+          </View>
+        </>
+      ) : (
+        <View style={styles.deck}>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Nothing shared yet</Text>
+            <Text style={styles.emptySubtitle}>Books other readers share will appear here.</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -141,114 +124,79 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.lightGray,
+    backgroundColor: '#FFF8F0',
   },
-  backgroundBlobTop: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: Colors.yellow,
-    top: 20,
-    right: -80,
-    opacity: 0.6,
-  },
-  backgroundBlobBottom: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: Colors.secondary,
-    bottom: 120,
-    left: -60,
-    opacity: 0.5,
-  },
-  hero: {
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-    gap: Spacing.sm,
+    paddingTop: Spacing.md,
   },
-  heroEyebrow: {
-    ...TextStyles.caption,
-    color: Colors.secondary,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  heroTitle: {
+  wordmark: {
     ...TextStyles.h2,
     color: Colors.brown,
-    fontFamily: 'Modak-Regular',
   },
-  heroSubtitle: {
-    ...TextStyles.bodySmall,
-    color: Colors.textLight,
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    backgroundColor: '#FFE3D6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  streakCard: {
-    marginTop: Spacing.lg,
-    marginHorizontal: Spacing.lg,
-    padding: Spacing.lg,
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.mediumGray,
+  toggle: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
   },
-  content: {
+  chips: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+  },
+  deck: {
     flex: 1,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
-    paddingBottom: 120,
+    paddingTop: Spacing.lg,
     justifyContent: 'center',
     alignItems: 'center',
   },
   cardStack: {
     width: '100%',
     height: '100%',
-    position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
   },
   currentCard: {
-    width: '82%',
+    width: '86%',
     zIndex: 10,
   },
   nextCard: {
-    width: '82%',
+    width: '80%',
     position: 'absolute',
-    top: 40,
     zIndex: 5,
-    opacity: 0.7,
+    opacity: 0.45,
+    transform: [{ translateY: 14 }],
   },
   emptyState: {
     backgroundColor: Colors.white,
     borderRadius: 20,
     padding: Spacing.xl,
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   emptyTitle: {
-    ...TextStyles.h2,
+    ...TextStyles.h3,
     color: Colors.textDark,
-    marginBottom: Spacing.sm,
   },
   emptySubtitle: {
     ...TextStyles.body,
     color: Colors.textLight,
     textAlign: 'center',
   },
-  footer: {
-    position: 'absolute',
-    bottom: 12,
-    alignSelf: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: BorderRadius.full,
-    alignItems: 'center',
-  },
-  counterText: {
-    ...TextStyles.caption,
-    color: Colors.brown,
-    fontWeight: '700',
+  actions: {
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
 });

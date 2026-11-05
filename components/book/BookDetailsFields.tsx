@@ -1,4 +1,4 @@
-import { BorderRadius, Colors, GENRES, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, GENRES, Spacing, TextStyles, Typography } from '@/constants';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface BookDetailsFieldsProps {
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     label: {
         ...TextStyles.body,
         color: Colors.textDark,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
         marginBottom: Spacing.md,
     },
     input: {
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     genreButtonText: {
         ...TextStyles.body,
         color: Colors.textDark,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     genreButtonTextActive: {
         color: Colors.white,

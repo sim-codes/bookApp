@@ -67,13 +67,16 @@ bookApp/
 ├── components/                   # Reusable UI components
 │   ├── BookCard.tsx             # Swipeable deck card with cover and details overlay
 │   ├── ConfirmationDialog.tsx   # Reusable confirmation modal
-│   ├── FloatingMenu.tsx         # Home screen menu
 │   ├── GeneratedCover.tsx       # Cover drawn from title and author
-│   ├── StreakDisplay.tsx        # Reading streak card
 │   ├── book/                    # Book form and list components
 │   │   ├── BookDetailsFields.tsx # Title, author and genre inputs
 │   │   ├── BookListItem.tsx     # Book row with cover and progress
-│   │   └── CoverEditor.tsx      # Cover preview with change/remove actions
+│   │   ├── CoverEditor.tsx      # Cover preview with change/remove actions
+│   │   └── SharingFields.tsx    # Share with other readers, free or paid
+│   ├── home/                    # Home screen components
+│   │   ├── DeckActions.tsx      # Skip, Read and Add buttons under the deck
+│   │   ├── LibraryToggle.tsx    # Mine / Everyone switch (behind a feature flag)
+│   │   └── ReadingStatChips.tsx # Streak and reading time chips
 │   └── reader/                  # Reader-specific components
 │       ├── ReaderHeader.tsx     # Header with title & page counter
 │       ├── ReadiumReader.tsx    # EPUB/PDF view, positions and table of contents
@@ -86,6 +89,7 @@ bookApp/
 │   ├── spacing.ts               # Spacing and border radius
 │   ├── typography.ts            # Fonts and text styles
 │   ├── genres.ts                # Genre list
+│   ├── features.ts              # Feature flags (community library)
 │   └── links.ts                 # External URLs (privacy policy)
 ├── stores/                       # Zustand state management
 │   ├── booksStore.ts            # Books/library state
@@ -101,7 +105,7 @@ bookApp/
 ├── utils/                        # Helpers (dates, base64, sorting, cover picking)
 ├── plugins/                      # Expo config plugins for Android build settings
 ├── patches/                      # pnpm patches for third-party packages
-├── docs/                         # Privacy policy (published with GitHub Pages)
+├── docs/                         # Landing page and privacy policy (published with GitHub Pages)
 ├── assets/                       # Fonts, images and branding sources
 ├── app.config.ts                 # Expo app configuration
 ├── eas.json                      # EAS build profiles
@@ -295,8 +299,9 @@ EPUB and PDF are both rendered by **Readium** (`react-native-readium`) through o
 
 **Home Screen** (`app/index.tsx`)
 - Swipeable deck of books, most recently active first
-- Swipe right to read, left or up to skip
-- Show reading streaks
+- Swipe right to read, left or up to skip, or use the Skip, Read and Add buttons
+- Streak and reading time chips; profile and settings from the avatar
+- Mine / Everyone toggle, hidden until `FEATURES.communityLibrary` is enabled
 
 **Reader Screen** (`app/reader/[bookId].tsx`)
 - Full-featured EPUB/PDF/TXT reader

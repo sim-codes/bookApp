@@ -1,4 +1,4 @@
-import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, Spacing, TextStyles, Typography } from '@/constants';
 import React from 'react';
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     modalButtonCancelText: {
         ...TextStyles.body,
         color: Colors.textDark,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     modalButtonConfirm: {
         backgroundColor: Colors.primary,
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     modalButtonText: {
         ...TextStyles.body,
         color: Colors.white,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     pageInput: {
         borderWidth: 1,

@@ -33,28 +33,24 @@ export const Typography = {
 export const TextStyles = {
     h1: {
         fontSize: Typography.h1,
-        fontWeight: Typography.bold,
         lineHeight: 42,
         fontFamily: 'Modak-Regular',
         letterSpacing: -0.5,
     },
     h2: {
         fontSize: Typography.h2,
-        fontWeight: Typography.bold,
         lineHeight: 34,
         fontFamily: 'Modak-Regular',
         letterSpacing: -0.3,
     },
     h3: {
         fontSize: Typography.h3,
-        fontWeight: Typography.bold,
         lineHeight: 30,
         fontFamily: 'Modak-Regular',
         letterSpacing: -0.2,
     },
     h4: {
         fontSize: Typography.h4,
-        fontWeight: Typography.semibold,
         lineHeight: 26,
         fontFamily: 'Modak-Regular',
         letterSpacing: -0.1,
