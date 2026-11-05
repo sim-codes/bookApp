@@ -76,16 +76,20 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
     ],
     "./plugins/withAndroidDesugaring",
     "./plugins/withNetworkSecurityConfig",
+    "./plugins/withReadiumKotlinOptIn",
     [
       "expo-build-properties",
       {
         android: {
           minSdkVersion: 24,
+          extraProguardRules: [
+            "-keep class org.readium.** { *; }",
+            "-keep class com.reactnativereadium.** { *; }",
+            "-keepclassmembers class * extends androidx.lifecycle.ViewModel { <init>(...); }",
+          ].join("\n"),
         },
       },
     ],
-    "@config-plugins/react-native-blob-util",
-    "@config-plugins/react-native-pdf",
   ],
   experiments: {
     typedRoutes: true,

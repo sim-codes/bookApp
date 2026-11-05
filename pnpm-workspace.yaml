@@ -10,6 +10,5 @@ minimumReleaseAgeExclude:
   - babel-preset-expo
 
 # pnpm 11 fails the install when a dependency has an unreviewed install script.
-# esbuild (pulled in by the dev-only tsx) works without its postinstall.
 allowBuilds:
-  esbuild: false
+  esbuild: true

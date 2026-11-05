@@ -11,8 +11,6 @@
     "lint": "expo lint"
   },
   "dependencies": {
-    "@config-plugins/react-native-blob-util": "^14.0.2",
-    "@config-plugins/react-native-pdf": "^14.0.2",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~58.0.23",
@@ -33,10 +31,8 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
-    "react-native-blob-util": "^0.25.1",
     "react-native-gesture-handler": "~3.3.0",
     "react-native-nitro-modules": "^0.35.0",
-    "react-native-pdf": "^7.0.5",
     "react-native-readium": "^5.3.0",
     "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "~5.11.1",

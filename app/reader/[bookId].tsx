@@ -1,5 +1,5 @@
 import { ConfirmationDialog } from '@/components/reader/ConfirmationDialog';
-import { EpubNavigationBar, EpubReader, EpubReaderHandle } from '@/components/reader/EpubReader';
+import { EpubNavigationBar, ReadiumReader, ReadiumReaderHandle } from '@/components/reader/ReadiumReader';
 import { JumpToPageModal } from '@/components/reader/JumpToPageModal';
 import { PdfNavigation } from '@/components/reader/PdfNavigation';
 import { ReaderHeader } from '@/components/reader/ReaderHeader';
@@ -20,7 +20,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import PdfReader from 'react-native-pdf';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type FileType = 'txt' | 'pdf' | 'epub' | 'unknown';
@@ -52,8 +51,7 @@ export default function ReaderScreen() {
     const [pageTransitioning, setPageTransitioning] = useState(false);
     const [isReading, setIsReading] = useState(false);
     const [fileType, setFileType] = useState<FileType>('unknown');
-    const [pdfPageCount, setPdfPageCount] = useState(0);
-    const [pdfUri, setPdfUri] = useState<string>('');
+    const [readiumUri, setReadiumUri] = useState<string>('');
     const [bookTitle, setBookTitle] = useState('');
     const [isPdfHorizontal, setIsPdfHorizontal] = useState(false);
     const [toast, setToast] = useState<ToastConfig>({ visible: false, message: '', type: 'info' });
@@ -61,23 +59,20 @@ export default function ReaderScreen() {
     const [confirmAction, setConfirmAction] = useState<() => void>(() => { });
     const [showJumpToPageModal, setShowJumpToPageModal] = useState(false);
 
-    // EPUB position — lifted from EpubReader via onPositionChange
-    const [epubCurrentPosition, setEpubCurrentPosition] = useState(0);
-    const [epubTotalPositions, setEpubTotalPositions] = useState(0);
+    // EPUB/PDF position — lifted from ReadiumReader via onPositionChange
+    const [readiumPosition, setReadiumPosition] = useState(0);
+    const [readiumTotalPositions, setReadiumTotalPositions] = useState(0);
     // Saved locator string passed down as initialLocator
-    const [savedEpubLocator, setSavedEpubLocator] = useState<string | null>(null);
-    // Ref to EpubReader — EpubNavigationBar calls imperative methods on it directly
-    const epubRef = useRef<EpubReaderHandle>(null);
+    const [savedLocator, setSavedLocator] = useState<string | null>(null);
+    // 1-based page to open a PDF at when it has no saved locator yet
+    const [initialPdfPosition, setInitialPdfPosition] = useState<number | undefined>(undefined);
+    // Ref to ReadiumReader — the navigation bars call imperative methods on it directly
+    const readiumRef = useRef<ReadiumReaderHandle>(null);
 
-    // PDF refs
-    const pdfReaderRef = useRef<any>(null);
     const navigationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const pdfPageChangeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const lastPdfPageRef = useRef(0);
-    const savedInitialPageRef = useRef(0);
-    const pdfLoadedRef = useRef(false);
 
     const book = bookId ? books?.[bookId] : null;
+    const isReadium = fileType === 'pdf' || fileType === 'epub';
 
     const getFileType = (filePath: string): FileType => {
         const ext = filePath.toLowerCase().split('.').pop() || '';
@@ -129,15 +124,13 @@ export default function ReaderScreen() {
                     updateBook(currentBook.id, { totalPages: bookPages.length }).catch(console.error);
                     const lastPage = currentBook.currentPage || 0;
                     setCurrentPageIndex(Math.min(lastPage, bookPages.length - 1));
-                } else if (type === 'pdf') {
-                    const savedPage = currentBook.currentPage || 0;
-                    savedInitialPageRef.current = savedPage;
-                    lastPdfPageRef.current = savedPage;
-                    setCurrentPageIndex(savedPage);
-                    setPdfUri(currentBook.fileUri);
-                } else if (type === 'epub') {
-                    setSavedEpubLocator(currentBook.epubLocator ?? null);
-                    setPdfUri(currentBook.fileUri);
+                } else if (type === 'pdf' || type === 'epub') {
+                    setSavedLocator(currentBook.epubLocator ?? null);
+                    if (type === 'pdf' && !currentBook.epubLocator) {
+                        // PDFs saved before the Readium reader stored a 0-based page index.
+                        setInitialPdfPosition((currentBook.currentPage || 0) + 1);
+                    }
+                    setReadiumUri(currentBook.fileUri);
                 } else {
                     showToast('Unsupported file format', 'error');
                     setPages(['Unsupported file format']);
@@ -161,12 +154,11 @@ export default function ReaderScreen() {
     useEffect(() => {
         return () => {
             if (navigationDebounceRef.current) clearTimeout(navigationDebounceRef.current);
-            if (pdfPageChangeDebounceRef.current) clearTimeout(pdfPageChangeDebounceRef.current);
         };
     }, []);
 
     const handleStartReading = () => {
-        startSession(bookId!, currentPageIndex);
+        startSession(bookId!, isReadium ? readiumPosition || book?.currentPage || 0 : currentPageIndex);
         setIsReading(true);
         showToast('Reading session started', 'success');
     };
@@ -184,23 +176,20 @@ export default function ReaderScreen() {
 
     const handleEndReading = async () => {
         try {
-            await endSession(fileType === 'epub' ? epubCurrentPosition : currentPageIndex);
+            await endSession(isReadium ? readiumPosition : currentPageIndex);
             setIsReading(false);
 
             if (bookId) {
                 try {
                     // Each format tracks position differently; a total of 0 means
                     // "not loaded yet", which must never count as completed.
-                    const isCompleted =
-                        fileType === 'pdf'
-                            ? pdfPageCount > 0 && currentPageIndex >= pdfPageCount - 1
-                            : fileType === 'epub'
-                            ? epubTotalPositions > 0 && epubCurrentPosition >= epubTotalPositions
-                            : pages.length > 0 && currentPageIndex >= pages.length - 1;
+                    const isCompleted = isReadium
+                        ? readiumTotalPositions > 0 && readiumPosition >= readiumTotalPositions
+                        : pages.length > 0 && currentPageIndex >= pages.length - 1;
 
                     await updateBook(bookId, {
-                        currentPage: fileType === 'epub' ? epubCurrentPosition : currentPageIndex,
-                        totalPages:  fileType === 'epub' ? epubTotalPositions  : fileType === 'pdf' ? pdfPageCount : pages.length,
+                        currentPage: isReadium ? readiumPosition : currentPageIndex,
+                        totalPages: isReadium ? readiumTotalPositions : pages.length,
                         status: isCompleted ? 'completed' : 'reading',
                     });
                 } catch (error) {
@@ -264,31 +253,6 @@ export default function ReaderScreen() {
         }
     };
 
-    const handlePdfPageChange = (page: number) => {
-        if (!pdfLoadedRef.current) return;
-        if (pdfPageChangeDebounceRef.current) clearTimeout(pdfPageChangeDebounceRef.current);
-
-        const newPageIndex = page - 1;
-        if (Math.abs(newPageIndex - lastPdfPageRef.current) > 0) {
-            lastPdfPageRef.current = newPageIndex;
-            setCurrentPageIndex(newPageIndex);
-
-            pdfPageChangeDebounceRef.current = setTimeout(() => {
-                if (bookId) {
-                    updateBook(bookId, { currentPage: newPageIndex, totalPages: pdfPageCount || 1 }).catch(
-                        error => console.error('Error updating PDF page:', error),
-                    );
-                }
-            }, 300);
-        }
-    };
-
-    const jumpToPdfPage = (pageNum: number) => {
-        if (pdfReaderRef.current?.setPage) pdfReaderRef.current.setPage(pageNum);
-        setCurrentPageIndex(pageNum - 1);
-        lastPdfPageRef.current = pageNum - 1;
-    };
-
     const handleBackPress = () => {
         if (isReading) {
             showConfirm('Save your reading session?', async () => {
@@ -303,12 +267,9 @@ export default function ReaderScreen() {
 
     // ─── Progress ─────────────────────────────────────────────────────────────
 
-    const progress =
-        fileType === 'pdf'
-            ? pdfPageCount > 0 ? ((currentPageIndex + 1) / pdfPageCount) * 100 : 0
-            : fileType === 'epub'
-            ? epubTotalPositions > 0 ? (epubCurrentPosition / epubTotalPositions) * 100 : 0
-            : pages.length > 0 ? ((currentPageIndex + 1) / pages.length) * 100 : 0;
+    const progress = isReadium
+        ? readiumTotalPositions > 0 ? (readiumPosition / readiumTotalPositions) * 100 : 0
+        : pages.length > 0 ? ((currentPageIndex + 1) / pages.length) * 100 : 0;
 
     // ─── Loading / error states ───────────────────────────────────────────────
 
@@ -323,7 +284,7 @@ export default function ReaderScreen() {
         );
     }
 
-    if (!book || (pages.length === 0 && !pdfUri)) {
+    if (!book || (pages.length === 0 && !readiumUri)) {
         return (
             <SafeAreaView style={styles.container}>
                 <View style={styles.backRow}>
@@ -344,14 +305,10 @@ export default function ReaderScreen() {
         <SafeAreaView style={styles.container} edges={['top']}>
             <ReaderHeader
                 title={bookTitle || 'Book'}
-                currentPage={currentPageIndex + 1}
-                totalPages={
-                    fileType === 'pdf' ? pdfPageCount
-                    : fileType === 'epub' ? epubTotalPositions
-                    : pages.length
-                }
-                epubCurrentPosition={fileType === 'epub' ? epubCurrentPosition : undefined}
-                epubTotalPositions={fileType === 'epub' ? epubTotalPositions : undefined}
+                currentPage={isReadium ? readiumPosition : currentPageIndex + 1}
+                totalPages={isReadium ? readiumTotalPositions : pages.length}
+                epubCurrentPosition={fileType === 'epub' ? readiumPosition : undefined}
+                epubTotalPositions={fileType === 'epub' ? readiumTotalPositions : undefined}
                 fileType={fileType as 'txt' | 'pdf' | 'epub'}
                 onBackPress={handleBackPress}
             />
@@ -376,40 +333,18 @@ export default function ReaderScreen() {
                             {pages[currentPageIndex] || 'Page not found'}
                         </Text>
                     </ScrollView>
-                ) : fileType === 'pdf' ? (
-                    <PdfReader
-                        ref={pdfReaderRef}
-                        source={{ uri: pdfUri, cache: true }}
-                        onLoadComplete={(numberOfPages) => {
-                            setPdfPageCount(numberOfPages);
-                            if (bookId) {
-                                updateBook(bookId, { totalPages: numberOfPages }).catch(console.error);
-                            }
-                            const savedPage = savedInitialPageRef.current;
-                            if (savedPage > 0 && pdfReaderRef.current?.setPage) {
-                                setTimeout(() => {
-                                    pdfReaderRef.current?.setPage?.(savedPage + 1);
-                                    pdfLoadedRef.current = true;
-                                }, 300);
-                            } else {
-                                pdfLoadedRef.current = true;
-                            }
-                        }}
-                        onPageChanged={handlePdfPageChange}
-                        style={styles.pdfViewer}
-                        onError={() => showToast('Error loading PDF', 'error')}
-                        enablePaging
-                        horizontal={isPdfHorizontal}
-                    />
-                ) : fileType === 'epub' ? (
-                    <EpubReader
-                        ref={epubRef}
-                        fileUri={pdfUri}
+                ) : fileType === 'pdf' || fileType === 'epub' ? (
+                    <ReadiumReader
+                        ref={readiumRef}
+                        fileUri={readiumUri}
                         bookId={bookId!}
-                        initialLocator={savedEpubLocator}
+                        format={fileType}
+                        initialLocator={savedLocator}
+                        initialPosition={initialPdfPosition}
+                        scrollAxis={isPdfHorizontal ? 'horizontal' : 'vertical'}
                         onPositionChange={(current, total) => {
-                            setEpubCurrentPosition(current);
-                            setEpubTotalPositions(total);
+                            setReadiumPosition(current);
+                            setReadiumTotalPositions(total);
                         }}
                         onToast={showToast}
                     />
@@ -466,7 +401,7 @@ export default function ReaderScreen() {
                 )}
 
                 {fileType === 'epub' && (
-                    <EpubNavigationBar epubRef={epubRef} />
+                    <EpubNavigationBar readerRef={readiumRef} />
                 )}
             </View>
 
@@ -487,11 +422,11 @@ export default function ReaderScreen() {
 
             <JumpToPageModal
                 visible={showJumpToPageModal}
-                currentPage={currentPageIndex}
-                maxPage={pdfPageCount}
+                currentPage={Math.max(0, readiumPosition - 1)}
+                maxPage={readiumTotalPositions}
                 onClose={() => setShowJumpToPageModal(false)}
                 onJump={(pageNum) => {
-                    jumpToPdfPage(pageNum);
+                    readiumRef.current?.goToPosition(pageNum);
                     setShowJumpToPageModal(false);
                     showToast(`Jumped to page ${pageNum}`, 'success');
                 }}
@@ -543,11 +478,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 100,
-    },
-    pdfViewer: {
-        flex: 1,
-        width: '100%',
-        backgroundColor: Colors.lightGray,
     },
     contentContainer: {
         paddingHorizontal: Spacing.lg,
