@@ -3,6 +3,7 @@ import { BookCardProps } from '@/types';
 import { toTitleCase } from '@/utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, Image, PanResponder, StyleSheet, Text, View } from 'react-native';
+import { GeneratedCover } from './GeneratedCover';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SWIPE_OUT_DURATION = 250;
@@ -114,48 +115,36 @@ export function BookCard({
             ]}
             {...panResponder.panHandlers}
         >
-            {/* Cover Image */}
-            <View style={styles.coverContainer}>
-                {coverUri ? (
-                    <Image source={{ uri: coverUri }} style={styles.cover} resizeMode="cover" />
-                ) : (
-                    <Image
-                        source={require('@/assets/images/default-cover.jpg')}
-                        style={styles.cover}
-                        resizeMode="cover"
-                    />
-                )}
+            {/* Cover fills the card; a generated cover already shows the title and author */}
+            {coverUri ? (
+                <Image source={{ uri: coverUri }} style={styles.cover} resizeMode="cover" />
+            ) : (
+                <GeneratedCover title={title} author={author} />
+            )}
 
-                {/* Progress Badge */}
-                {progress > 0 && (
-                    <View style={styles.progressBadge}>
-                        <Text style={styles.progressText}>{Math.round(progress)}%</Text>
-                    </View>
-                )}
-            </View>
-
-            {/* Book Info */}
-            <View style={styles.infoContainer}>
-                <Text style={styles.title} numberOfLines={2}>
-                    {toTitleCase(title)}
-                </Text>
-                <Text style={styles.author} numberOfLines={1}>
-                    {toTitleCase(author)}
-                </Text>
-
-                {/* Progress Bar */}
-                <View style={styles.progressBarContainer}>
-                    <View
-                        style={[
-                            styles.progressBar,
-                            { width: `${Math.max(progress, 5)}%` },
-                        ]}
-                    />
+            {progress > 0 && (
+                <View style={styles.progressBadge}>
+                    <Text style={styles.progressText}>{Math.round(progress)}%</Text>
                 </View>
+            )}
+
+            <View style={styles.overlay}>
+                {coverUri && (
+                    <>
+                        <Text style={styles.title} numberOfLines={2}>
+                            {toTitleCase(title)}
+                        </Text>
+                        <Text style={styles.author} numberOfLines={1}>
+                            {toTitleCase(author)}
+                        </Text>
+                    </>
+                )}
+                <Text style={styles.hint}>← Swipe right to read →</Text>
             </View>
 
-            {/* Swipe Hint */}
-            <Text style={styles.hint}>← Swipe right to read →</Text>
+            <View style={styles.progressBarContainer}>
+                <View style={[styles.progressBar, { width: `${progress}%` }]} />
+            </View>
         </Animated.View>
     );
 }
@@ -169,13 +158,20 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         ...Shadows.large,
     },
-    coverContainer: {
-        flex: 1,
-        position: 'relative',
-    },
     cover: {
         width: '100%',
         height: '100%',
+    },
+    overlay: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        paddingHorizontal: Spacing.lg,
+        paddingTop: Spacing.md,
+        paddingBottom: Spacing.md + 4,
+        gap: Spacing.xs,
+        backgroundColor: 'rgba(0, 0, 0, 0.55)',
     },
     progressBadge: {
         position: 'absolute',
@@ -191,25 +187,20 @@ const styles = StyleSheet.create({
         color: Colors.white,
         fontWeight: '600',
     },
-    infoContainer: {
-        paddingHorizontal: Spacing.lg,
-        paddingTop: Spacing.lg,
-        paddingBottom: Spacing.md,
-        gap: Spacing.md,
-    },
     title: {
         ...TextStyles.h4,
-        color: Colors.textDark,
+        color: Colors.white,
     },
     author: {
         ...TextStyles.bodySmall,
-        color: Colors.textLight,
+        color: 'rgba(255, 255, 255, 0.85)',
     },
     progressBarContainer: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
         height: 4,
-        backgroundColor: Colors.mediumGray,
-        borderRadius: BorderRadius.xs,
-        overflow: 'hidden',
     },
     progressBar: {
         height: '100%',
@@ -217,9 +208,8 @@ const styles = StyleSheet.create({
     },
     hint: {
         ...TextStyles.caption,
-        color: Colors.darkGray,
+        color: 'rgba(255, 255, 255, 0.75)',
         textAlign: 'center',
-        paddingHorizontal: Spacing.lg,
-        paddingBottom: Spacing.md,
+        marginTop: Spacing.xs,
     },
 });
