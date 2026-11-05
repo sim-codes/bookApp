@@ -52,11 +52,6 @@ export default function HomeScreen() {
     handleSwipeLeft();
   };
 
-  const handleMenuClose = () => {
-    // Close menu by clicking outside
-  };
-
-
   const menuItems = useMemo(() => [
     {
       id: 'add-book',
@@ -75,12 +70,6 @@ export default function HomeScreen() {
       label: 'Settings',
       icon: 'settings',
       onPress: () => router.push('/settings'),
-    },
-    {
-      id: 'login',
-      label: 'Login',
-      icon: 'login',
-      onPress: () => router.push('/auth/login'),
     },
   ], [router]);
 
@@ -144,7 +133,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      <FloatingMenu items={menuItems} onToggle={handleMenuClose} />
+      <FloatingMenu items={menuItems} />
     </SafeAreaView>
   );
 }

@@ -3,12 +3,12 @@ import { ExpoConfig } from "expo/config";
 
 module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
   ...config,
-  name: "bookApp",
+  name: "Spinematch",
   slug: "bookApp",
   version: "1.0.0",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
-  scheme: "bookapp",
+  scheme: "spinematch",
   userInterfaceStyle: "automatic",
   ios: {
     supportsTablet: true,
@@ -21,14 +21,19 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       monochromeImage: "./assets/images/android-icon-monochrome.png",
     },
     predictiveBackGestureEnabled: false,
-    // RECORD_AUDIO is intentionally not requested: the app never records audio.
-    permissions: [
+    // Books and covers come through the system file and photo pickers, which need no permissions.
+    permissions: [],
+    blockedPermissions: [
       "android.permission.READ_EXTERNAL_STORAGE",
       "android.permission.WRITE_EXTERNAL_STORAGE",
-      "android.permission.DOWNLOAD_WITHOUT_NOTIFICATION",
-      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.READ_MEDIA_AUDIO",
+      "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO",
     ],
-    package: "com.sim_codes.bookApp",
+    package: "com.simcodes.spinematch",
   },
   web: {
     output: "static",
@@ -62,7 +67,8 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       "expo-image-picker",
       {
         photosPermission:
-          "bookApp accesses your photos so you can pick a cover image for your books.",
+          "Spinematch lets you pick a photo to use as a book cover.",
+        cameraPermission: false,
         microphonePermission: false,
         colors: {
           cropToolbarColor: "#000000",
@@ -77,6 +83,7 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
     "./plugins/withAndroidDesugaring",
     "./plugins/withNetworkSecurityConfig",
     "./plugins/withReadiumKotlinOptIn",
+    "./plugins/withHiddenReadiumPositionLabel",
     [
       "expo-build-properties",
       {
