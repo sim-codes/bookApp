@@ -1,7 +1,7 @@
 import { ConfirmationDialog } from '@/components';
-import { BookDetailsFields, CoverAction, CoverEditor } from '@/components/book';
+import { BookDetailsFields, CoverAction, CoverEditor, SharingFields, SharingValue, sharingError } from '@/components/book';
 import { Toast } from '@/components/reader/Toast';
-import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, FEATURES, Spacing, TextStyles, Typography } from '@/constants';
 import { bookFiles, extractBookMetadata } from '@/services';
 import { useBooksStore } from '@/stores';
 import { pickCoverImage } from '@/utils/pickCoverImage';
@@ -26,6 +26,11 @@ export default function EditBookScreen() {
     const [title, setTitle] = useState(book?.title ?? '');
     const [author, setAuthor] = useState(book?.author === 'Unknown Author' ? '' : book?.author ?? '');
     const [genre, setGenre] = useState(book?.genre === 'Unknown' ? '' : book?.genre ?? '');
+    const [sharing, setSharing] = useState<SharingValue>({
+        visibility: book?.visibility ?? 'private',
+        access: book?.access ?? 'paid',
+        rightsConfirmed: book?.visibility === 'public' && book?.access === 'free',
+    });
     // undefined: keep the current cover; null: remove it; string: replace it with this image.
     const [newCoverUri, setNewCoverUri] = useState<string | null | undefined>(undefined);
     const [isBusy, setIsBusy] = useState(false);
@@ -89,6 +94,12 @@ export default function EditBookScreen() {
             return;
         }
 
+        const sharingProblem = sharingError(sharing);
+        if (sharingProblem) {
+            showToast(sharingProblem, 'error');
+            return;
+        }
+
         setIsBusy(true);
         let storedCoverUri: string | undefined;
         try {
@@ -98,6 +109,8 @@ export default function EditBookScreen() {
                 title: title.trim(),
                 author: author.trim() || 'Unknown Author',
                 genre: genre || 'Unknown',
+                visibility: sharing.visibility,
+                access: sharing.visibility === 'public' ? sharing.access : undefined,
                 ...(newCoverUri !== undefined && { coverUri: storedCoverUri }),
             });
 
@@ -146,6 +159,8 @@ export default function EditBookScreen() {
                     onAuthorChange={setAuthor}
                     onGenreChange={setGenre}
                 />
+
+                {FEATURES.communityLibrary && <SharingFields value={sharing} onChange={setSharing} />}
 
                 <TouchableOpacity
                     style={[styles.saveButton, isBusy && styles.buttonDisabled]}
@@ -222,7 +237,6 @@ const styles = StyleSheet.create({
     saveButtonText: {
         ...TextStyles.h4,
         color: Colors.white,
-        fontWeight: '700',
     },
     deleteButton: {
         flexDirection: 'row',
@@ -235,7 +249,7 @@ const styles = StyleSheet.create({
     deleteButtonText: {
         ...TextStyles.body,
         color: Colors.error,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     missing: {
         flex: 1,
@@ -250,7 +264,7 @@ const styles = StyleSheet.create({
     link: {
         ...TextStyles.body,
         color: Colors.primary,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     spacer: {
         height: Spacing.xl,

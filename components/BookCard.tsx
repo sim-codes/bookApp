@@ -1,4 +1,4 @@
-import { BorderRadius, Colors, Shadows, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, Shadows, Spacing, TextStyles, Typography } from '@/constants';
 import { BookCardProps } from '@/types';
 import { toTitleCase } from '@/utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     progressText: {
         ...TextStyles.bodySmall,
         color: Colors.white,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
     },
     title: {
         ...TextStyles.h4,

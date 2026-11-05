@@ -1,3 +1,6 @@
+export type BookVisibility = 'private' | 'public';
+export type BookAccess = 'free' | 'paid';
+
 export interface Book {
     id: string;
     title: string;
@@ -10,6 +13,8 @@ export interface Book {
     currentPage?: number;
     epubLocator?: string;       // JSON stringified Locator for EPUB
     status?: 'reading' | 'completed' | 'paused';
+    visibility?: BookVisibility; // Missing means private
+    access?: BookAccess;         // Only meaningful for public books
     addedDate?: string; // YYYY-MM-DD format
     createdAt?: number;  // Timestamp
     updatedAt?: number;

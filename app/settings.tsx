@@ -1,6 +1,6 @@
 import { ConfirmationDialog } from '@/components';
 import { Toast } from '@/components/reader/Toast';
-import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, Spacing, TextStyles, Typography } from '@/constants';
 import { clearAllData } from '@/services';
 import { useBooksStore, useReadingStore } from '@/stores';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         ...TextStyles.bodySmall,
         color: Colors.textLight,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
         textTransform: 'uppercase',
         letterSpacing: 0.8,
         marginTop: Spacing.lg,

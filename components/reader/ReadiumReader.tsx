@@ -1,4 +1,4 @@
-import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, Spacing, TextStyles, Typography } from '@/constants';
 import { useBooksStore } from '@/stores';
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     fontSizeLabel: {
         fontSize: 15,
         color: Colors.primary,
-        fontWeight: '700',
+        fontFamily: Typography.fontFamily.semibold,
     },
     fontSizeLabelLg: {
         fontSize: 17,
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     },
     tocTitle: {
         fontSize: 18,
-        fontWeight: '700',
+        fontFamily: Typography.fontFamily.semibold,
         color: Colors.textDark,
         letterSpacing: 0.2,
     },
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
     tocMetaText: {
         fontSize: 12,
         color: Colors.textLight,
-        fontWeight: '500',
+        fontFamily: Typography.fontFamily.regular,
         textTransform: 'uppercase',
         letterSpacing: 0.8,
     },
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
     },
     tocChapterNum: {
         fontSize: 12,
-        fontWeight: '700',
+        fontFamily: Typography.fontFamily.semibold,
         color: Colors.primary,
     },
     tocItemText: {
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
     },
     tocItemTextTop: {
         fontSize: 15,
-        fontWeight: '500',
+        fontFamily: Typography.fontFamily.regular,
     },
     tocItemTextSub: {
         fontSize: 14,
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     },
     tocEmptyTitle: {
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: Typography.fontFamily.semibold,
         color: Colors.textDark,
     },
     tocEmptyText: {
