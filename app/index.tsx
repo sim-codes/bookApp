@@ -1,6 +1,7 @@
 import { BookCard, FloatingMenu, StreakDisplay } from '@/components';
 import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
 import { useBooksStore, useReadingStore } from '@/stores';
+import { bookProgress, sortBooksByActivity } from '@/utils';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -11,7 +12,8 @@ export default function HomeScreen() {
   const { books, loadBooks } = useBooksStore();
   const { stats, loadStats } = useReadingStore();
   const [currentIndex, setCurrentIndex] = useState(0);
-  const bookList = Object.values(books);
+  // Most recent activity first, so a newly added or just-read book tops the deck.
+  const bookList = useMemo(() => sortBooksByActivity(Object.values(books)), [books]);
   const currentBook = bookList[currentIndex];
 
   // Load data on mount
@@ -25,6 +27,7 @@ export default function HomeScreen() {
   // Reload data when screen focuses (after returning from reader)
   useFocusEffect(
     useCallback(() => {
+      setCurrentIndex(0);
       loadBooks();
       loadStats();
     }, [loadBooks, loadStats])
@@ -53,10 +56,6 @@ export default function HomeScreen() {
     // Close menu by clicking outside
   };
 
-  const calculateProgress = (book: typeof currentBook) => {
-    if (!book?.totalPages || !book?.currentPage) return 0;
-    return Math.min((book.currentPage / book.totalPages) * 100, 100);
-  };
 
   const menuItems = useMemo(() => [
     {
@@ -116,7 +115,7 @@ export default function HomeScreen() {
                 title={bookList[(currentIndex + 1) % bookList.length]?.title || 'Unknown'}
                 author={bookList[(currentIndex + 1) % bookList.length]?.author || 'Unknown'}
                 coverUri={bookList[(currentIndex + 1) % bookList.length]?.coverUri}
-                progress={calculateProgress(bookList[(currentIndex + 1) % bookList.length])}
+                progress={bookProgress(bookList[(currentIndex + 1) % bookList.length])}
                 rotation={-3}
                 style={styles.nextCard}
               />
@@ -128,7 +127,7 @@ export default function HomeScreen() {
               title={currentBook?.title || 'Unknown'}
               author={currentBook?.author || 'Unknown'}
               coverUri={currentBook?.coverUri}
-              progress={calculateProgress(currentBook)}
+              progress={bookProgress(currentBook)}
               rotation={3}
               onSwipeRight={handleSwipeRight}
               onSwipeLeft={handleSwipeLeft}

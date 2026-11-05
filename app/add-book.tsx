@@ -1,27 +1,24 @@
+import { BookDetailsFields, CoverAction, CoverEditor } from '@/components/book';
 import { Toast } from '@/components/reader/Toast';
 import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
-import { bookFiles } from '@/services';
+import { bookFiles, extractBookMetadata } from '@/services';
 import { useBooksStore } from '@/stores';
 import { Book } from '@/types';
 import { generateId, getTodayDate } from '@/utils';
+import { pickCoverImage } from '@/utils/pickCoverImage';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Image,
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-const GENRES = ['Fiction', 'Non-Fiction', 'Mystery', 'Romance', 'Sci-Fi', 'Fantasy', 'Biography', 'Other'];
 
 interface ToastConfig {
     visible: boolean;
@@ -36,16 +33,22 @@ export default function AddBookScreen() {
     const [title, setTitle] = useState('');
     const [author, setAuthor] = useState('');
     const [selectedGenre, setSelectedGenre] = useState('');
-    const [coverUri, setCoverUri] = useState<string | null>(null);
+    const [fileCoverUri, setFileCoverUri] = useState<string | null>(null);
+    const [customCoverUri, setCustomCoverUri] = useState<string | null>(null);
     const [fileUri, setFileUri] = useState<string | null>(null);
     const [fileName, setFileName] = useState('');
+    const [isReadingFile, setIsReadingFile] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [isBasicMode, setIsBasicMode] = useState(true);
     const [toast, setToast] = useState<ToastConfig>({
         visible: false,
         message: '',
         type: 'info',
     });
+
+    // Fields the user has typed in keep their value when a different file is picked.
+    const editedFields = useRef({ title: false, author: false, genre: false });
+
+    const coverUri = customCoverUri ?? fileCoverUri;
 
     const showToast = (message: string, type: ToastConfig['type'] = 'info') => {
         setToast({ visible: true, message, type });
@@ -68,58 +71,57 @@ export default function AddBookScreen() {
                 type: ['application/pdf', 'text/plain', 'application/epub+zip'],
             });
 
-            if (!result.canceled && result.assets && result.assets.length > 0) {
-                const asset = result.assets[0];
-                const fileType = getFileType(asset.name || '');
+            if (result.canceled || !result.assets || result.assets.length === 0) return;
 
-                if (fileType === 'unknown') {
-                    showToast('Please select a PDF, TXT, or EPUB file', 'error');
-                    return;
-                }
-
-                setFileUri(asset.uri);
-                setFileName(asset.name || 'book-file');
-                showToast(`${fileType.toUpperCase()} file selected`, 'success');
+            const asset = result.assets[0];
+            const name = asset.name || 'book-file';
+            if (getFileType(name) === 'unknown') {
+                showToast('Please select a PDF, TXT, or EPUB file', 'error');
+                return;
             }
+
+            setFileUri(asset.uri);
+            setFileName(name);
+            setIsReadingFile(true);
+
+            const metadata = await extractBookMetadata(asset.uri, name);
+            if (!editedFields.current.title) setTitle(metadata.title);
+            if (!editedFields.current.author) setAuthor(metadata.author ?? '');
+            if (!editedFields.current.genre) setSelectedGenre(metadata.genre ?? '');
+            setFileCoverUri(metadata.coverUri ?? null);
         } catch {
             showToast('Failed to pick file', 'error');
+        } finally {
+            setIsReadingFile(false);
         }
     };
 
-    const pickImage = async () => {
-        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-        if (permissionResult.status !== 'granted') {
-            showToast('Media library permission required', 'error');
-            return;
-        }
-
+    const changeCover = async () => {
         try {
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
-                allowsEditing: true,
-                aspect: [3, 4],
-                quality: 0.8,
-            });
-
-            if (!result.canceled && result.assets && result.assets.length > 0) {
-                setCoverUri(result.assets[0].uri);
-                showToast('Cover image selected', 'success');
-            }
-        } catch {
-            showToast('Failed to pick image', 'error');
+            const uri = await pickCoverImage();
+            if (uri) setCustomCoverUri(uri);
+        } catch (error) {
+            showToast(error instanceof Error ? error.message : 'Failed to pick image', 'error');
         }
     };
+
+    const coverActions: CoverAction[] = [{ label: 'Change cover', icon: 'image', onPress: changeCover }];
+    if (customCoverUri) {
+        coverActions.push({
+            label: fileCoverUri ? "Use book's cover" : 'Remove',
+            icon: 'undo',
+            onPress: () => setCustomCoverUri(null),
+        });
+    }
 
     const handleAddBook = async () => {
-        // Validation - only title and file are required
-        if (!title.trim()) {
-            showToast('Please enter a book title', 'error');
+        if (!fileUri) {
+            showToast('Please select a book file (PDF, TXT, or EPUB)', 'error');
             return;
         }
 
-        if (!fileUri) {
-            showToast('Please select a book file (PDF, TXT, or EPUB)', 'error');
+        if (!title.trim()) {
+            showToast('Please enter a book title', 'error');
             return;
         }
 
@@ -176,129 +178,64 @@ export default function AddBookScreen() {
                 <View style={{ width: 24 }} />
             </View>
 
-            {/* Mode Toggle */}
-            <View style={styles.modeToggle}>
-                <TouchableOpacity
-                    style={[styles.modeButton, isBasicMode && styles.modeButtonActive]}
-                    onPress={() => setIsBasicMode(true)}
-                >
-                    <Text style={[styles.modeButtonText, isBasicMode && styles.modeButtonTextActive]}>
-                        Basic
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.modeButton, !isBasicMode && styles.modeButtonActive]}
-                    onPress={() => setIsBasicMode(false)}
-                >
-                    <Text style={[styles.modeButtonText, !isBasicMode && styles.modeButtonTextActive]}>
-                        Full
-                    </Text>
-                </TouchableOpacity>
-            </View>
-
             <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Cover Image Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Book Cover (Optional)</Text>
-                    <TouchableOpacity style={styles.imagePicker} onPress={pickImage} activeOpacity={0.7}>
-                        {coverUri && coverUri !== '' ? (
-                            <Image
-                                key={coverUri}
-                                source={{ uri: coverUri }}
-                                style={styles.coverImage}
-                                onError={() => console.log('Image load error')}
-                            />
-                        ) : (
-                            <View style={styles.imagePlaceholder}>
-                                <MaterialIcons name="image-not-supported" size={48} color={Colors.mediumGray} />
-                                <Text style={styles.imageText}>Tap to add cover</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                </View>
-
-                {/* Title Input */}
-                <View style={styles.section}>
-                    <Text style={styles.label}>Book Title *</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Enter book title"
-                        placeholderTextColor={Colors.mediumGray}
-                        value={title}
-                        onChangeText={setTitle}
-                    />
-                </View>
-
-                {/* Full Mode - Show Author and Genre */}
-                {!isBasicMode && (
-                    <>
-                        {/* Author Input */}
-                        <View style={styles.section}>
-                            <Text style={styles.label}>Author</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Enter author name"
-                                placeholderTextColor={Colors.mediumGray}
-                                value={author}
-                                onChangeText={setAuthor}
-                            />
-                        </View>
-
-                        {/* Genre Selection */}
-                        <View style={styles.section}>
-                            <Text style={styles.label}>Genre</Text>
-                            <View style={styles.genreGrid}>
-                                {GENRES.map((genre) => (
-                                    <TouchableOpacity
-                                        key={genre}
-                                        style={[
-                                            styles.genreButton,
-                                            selectedGenre === genre && styles.genreButtonActive,
-                                        ]}
-                                        onPress={() => setSelectedGenre(genre)}
-                                    >
-                                        <Text
-                                            style={[
-                                                styles.genreButtonText,
-                                                selectedGenre === genre && styles.genreButtonTextActive,
-                                            ]}
-                                        >
-                                            {genre}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </View>
-                    </>
-                )}
-
                 {/* File Picker */}
                 <View style={styles.section}>
                     <Text style={styles.label}>Book File (PDF, TXT, or EPUB) *</Text>
-                    <TouchableOpacity style={styles.filePicker} onPress={pickFile}>
-                        <MaterialIcons
-                            name={fileUri ? 'check-circle' : 'file-upload'}
-                            size={24}
-                            color={fileUri ? Colors.primary : Colors.mediumGray}
-                        />
+                    <TouchableOpacity style={styles.filePicker} onPress={pickFile} disabled={isReadingFile}>
+                        {isReadingFile ? (
+                            <ActivityIndicator color={Colors.primary} />
+                        ) : (
+                            <MaterialIcons
+                                name={fileUri ? 'check-circle' : 'file-upload'}
+                                size={24}
+                                color={fileUri ? Colors.primary : Colors.mediumGray}
+                            />
+                        )}
                         <View style={styles.filePickerText}>
                             <Text style={styles.filePickerLabel}>
-                                {fileUri ? 'File Selected' : 'Select Book File'}
+                                {isReadingFile ? 'Reading book details…' : fileUri ? 'File Selected' : 'Select Book File'}
                             </Text>
-                            {fileName && (
+                            {fileName ? (
                                 <Text style={styles.filePickerSubtitle} numberOfLines={1}>
                                     {fileName}
+                                </Text>
+                            ) : (
+                                <Text style={styles.filePickerSubtitle}>
+                                    We&apos;ll fill in the details and cover for you
                                 </Text>
                             )}
                         </View>
                     </TouchableOpacity>
                 </View>
 
+                <View style={styles.section}>
+                    <CoverEditor coverUri={coverUri} title={title} author={author} actions={coverActions} />
+                </View>
+
+                <BookDetailsFields
+                    title={title}
+                    author={author}
+                    genre={selectedGenre}
+                    onTitleChange={text => {
+                        editedFields.current.title = true;
+                        setTitle(text);
+                    }}
+                    onAuthorChange={text => {
+                        editedFields.current.author = true;
+                        setAuthor(text);
+                    }}
+                    onGenreChange={genre => {
+                        editedFields.current.genre = true;
+                        setSelectedGenre(genre);
+                    }}
+                />
+
                 {/* Save Button */}
                 <TouchableOpacity
-                    style={[styles.saveButton, isLoading && styles.saveButtonDisabled]}
+                    style={[styles.saveButton, (isLoading || isReadingFile) && styles.saveButtonDisabled]}
                     onPress={handleAddBook}
-                    disabled={isLoading}
+                    disabled={isLoading || isReadingFile}
                 >
                     {isLoading ? (
                         <ActivityIndicator color={Colors.white} size="small" />
@@ -350,78 +287,11 @@ const styles = StyleSheet.create({
     section: {
         marginBottom: Spacing.xl,
     },
-    sectionLabel: {
-        ...TextStyles.h4,
-        color: Colors.textDark,
-        marginBottom: Spacing.md,
-    },
     label: {
         ...TextStyles.body,
         color: Colors.textDark,
         fontWeight: '600',
         marginBottom: Spacing.md,
-    },
-    input: {
-        backgroundColor: Colors.white,
-        borderRadius: BorderRadius.md,
-        borderWidth: 1,
-        borderColor: Colors.mediumGray,
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.md,
-        fontSize: 16,
-        color: Colors.textDark,
-    },
-    imagePicker: {
-        backgroundColor: Colors.white,
-        borderRadius: BorderRadius.lg,
-        overflow: 'hidden',
-        borderWidth: 2,
-        borderColor: Colors.lightGray,
-        borderStyle: 'dashed',
-    },
-    coverImage: {
-        width: '100%',
-        height: 240,
-        resizeMode: 'cover',
-    },
-    imagePlaceholder: {
-        height: 240,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: Colors.white,
-    },
-    imageText: {
-        ...TextStyles.bodySmall,
-        color: Colors.darkGray,
-        marginTop: Spacing.md,
-    },
-    genreGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: Spacing.md,
-    },
-    genreButton: {
-        flex: 1,
-        minWidth: '45%',
-        paddingHorizontal: Spacing.md,
-        paddingVertical: Spacing.md,
-        backgroundColor: Colors.white,
-        borderRadius: BorderRadius.md,
-        borderWidth: 1,
-        borderColor: Colors.mediumGray,
-        alignItems: 'center',
-    },
-    genreButtonActive: {
-        backgroundColor: Colors.primary,
-        borderColor: Colors.primary,
-    },
-    genreButtonText: {
-        ...TextStyles.body,
-        color: Colors.textDark,
-        fontWeight: '600',
-    },
-    genreButtonTextActive: {
-        color: Colors.white,
     },
     filePicker: {
         backgroundColor: Colors.white,
@@ -469,33 +339,5 @@ const styles = StyleSheet.create({
     },
     spacer: {
         height: Spacing.xl,
-    },
-    modeToggle: {
-        marginTop: Spacing.sm,
-        flexDirection: 'row',
-        gap: Spacing.sm,
-        marginBottom: Spacing.md,
-        justifyContent: 'center',
-    },
-    modeButton: {
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.sm,
-        backgroundColor: Colors.white,
-        borderRadius: BorderRadius.full,
-        borderWidth: 2,
-        borderColor: Colors.mediumGray,
-        alignItems: 'center',
-    },
-    modeButtonActive: {
-        backgroundColor: Colors.primary,
-        borderColor: Colors.primary,
-    },
-    modeButtonText: {
-        ...TextStyles.bodySmall,
-        color: Colors.textDark,
-        fontWeight: '600',
-    },
-    modeButtonTextActive: {
-        color: Colors.white,
     },
 });

@@ -54,7 +54,7 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
         resizeMode: "contain",
         backgroundColor: "#FFF8F0",
         dark: {
-          backgroundColor: "#3D2817",
+          backgroundColor: "#1A1A1A",
         },
       },
     ],

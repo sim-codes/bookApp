@@ -1,11 +1,20 @@
+import { BookListItem } from '@/components/book';
 import { Colors, Spacing, TextStyles } from '@/constants';
+import { useBooksStore } from '@/stores';
+import { sortBooksByActivity } from '@/utils';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Fragment, useMemo } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const PREVIEW_COUNT = 5;
 
 export default function ProfileScreen() {
     const router = useRouter();
+    const books = useBooksStore(state => state.books);
+    const bookList = useMemo(() => sortBooksByActivity(Object.values(books)), [books]);
+    const preview = bookList.slice(0, PREVIEW_COUNT);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -17,9 +26,34 @@ export default function ProfileScreen() {
                 <View style={{ width: 24 }} />
             </View>
 
-            <View style={styles.content}>
-                <Text style={styles.placeholder}>👤 Profile Screen (Coming Soon)</Text>
-            </View>
+            <ScrollView contentContainerStyle={styles.content}>
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>
+                        My Books{bookList.length > 0 ? ` (${bookList.length})` : ''}
+                    </Text>
+                    {bookList.length > PREVIEW_COUNT && (
+                        <TouchableOpacity onPress={() => router.push('/my-books')}>
+                            <Text style={styles.link}>See all</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+
+                {preview.length > 0 ? (
+                    preview.map((book, index) => (
+                        <Fragment key={book.id}>
+                            {index > 0 && <View style={styles.separator} />}
+                            <BookListItem book={book} onPress={() => router.push(`/edit-book/${book.id}`)} />
+                        </Fragment>
+                    ))
+                ) : (
+                    <View style={styles.empty}>
+                        <Text style={styles.emptyText}>Books you add will appear here.</Text>
+                        <TouchableOpacity onPress={() => router.push('/add-book')}>
+                            <Text style={styles.link}>Add a book</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -43,12 +77,34 @@ const styles = StyleSheet.create({
         color: Colors.textDark,
     },
     content: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
+        padding: Spacing.lg,
     },
-    placeholder: {
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: Spacing.md,
+    },
+    sectionTitle: {
+        ...TextStyles.h4,
+        color: Colors.textDark,
+    },
+    separator: {
+        height: 1,
+        backgroundColor: Colors.lightGray,
+    },
+    empty: {
+        alignItems: 'center',
+        paddingTop: Spacing.lg,
+        gap: Spacing.md,
+    },
+    emptyText: {
         ...TextStyles.body,
         color: Colors.textLight,
+    },
+    link: {
+        ...TextStyles.body,
+        color: Colors.primary,
+        fontWeight: '600',
     },
 });

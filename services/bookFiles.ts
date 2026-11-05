@@ -1,3 +1,4 @@
+import { bytesToBase64, generateId } from '@/utils';
 import * as FileSystem from 'expo-file-system/legacy';
 
 /**
@@ -37,9 +38,19 @@ export const bookFiles = {
     /** Copy a picked cover image into permanent storage and return its new URI. */
     async persistCover(sourceUri: string, bookId: string): Promise<string> {
         await ensureDir();
-        const dest = `${BOOKS_DIR}${bookId}_cover.${getExtension(sourceUri, 'jpg')}`;
+        // A fresh name per cover, so a replacement never collides with the old file or a cached image.
+        const dest = `${BOOKS_DIR}${bookId}_cover_${generateId()}.${getExtension(sourceUri, 'jpg')}`;
         await FileSystem.copyAsync({ from: sourceUri, to: dest });
         return dest;
+    },
+
+    /** Write cover image bytes to a temporary cache file and return its URI. */
+    async saveTempCover(bytes: Uint8Array, extension: string): Promise<string> {
+        const uri = `${FileSystem.cacheDirectory}cover_${generateId()}.${getExtension(`x.${extension}`, 'jpg')}`;
+        await FileSystem.writeAsStringAsync(uri, bytesToBase64(bytes), {
+            encoding: FileSystem.EncodingType.Base64,
+        });
+        return uri;
     },
 
     /** Best-effort delete of files we own; ignores URIs outside the books directory. */

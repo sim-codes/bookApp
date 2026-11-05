@@ -1,11 +1,10 @@
-import { ConfirmationDialog } from '@/components/reader/ConfirmationDialog';
 import { EpubNavigationBar, ReadiumReader, ReadiumReaderHandle } from '@/components/reader/ReadiumReader';
 import { JumpToPageModal } from '@/components/reader/JumpToPageModal';
 import { PdfNavigation } from '@/components/reader/PdfNavigation';
 import { ReaderHeader } from '@/components/reader/ReaderHeader';
 import { Toast } from '@/components/reader/Toast';
 import { TxtNavigation } from '@/components/reader/TxtNavigation';
-import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { Colors, Spacing, TextStyles } from '@/constants';
 import { booksStorage } from '@/services';
 import { useBooksStore, useReadingStore } from '@/stores';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -14,6 +13,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    AppState,
     ScrollView,
     StyleSheet,
     Text,
@@ -49,14 +49,11 @@ export default function ReaderScreen() {
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
     const [loading, setLoading] = useState(true);
     const [pageTransitioning, setPageTransitioning] = useState(false);
-    const [isReading, setIsReading] = useState(false);
     const [fileType, setFileType] = useState<FileType>('unknown');
     const [readiumUri, setReadiumUri] = useState<string>('');
     const [bookTitle, setBookTitle] = useState('');
     const [isPdfHorizontal, setIsPdfHorizontal] = useState(false);
     const [toast, setToast] = useState<ToastConfig>({ visible: false, message: '', type: 'info' });
-    const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-    const [confirmAction, setConfirmAction] = useState<() => void>(() => { });
     const [showJumpToPageModal, setShowJumpToPageModal] = useState(false);
 
     // EPUB/PDF position — lifted from ReadiumReader via onPositionChange
@@ -85,11 +82,6 @@ export default function ReaderScreen() {
     const showToast = (message: string, type: ToastConfig['type'] = 'info') => {
         setToast({ visible: true, message, type });
         setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3000);
-    };
-
-    const showConfirm = (message: string, onConfirm: () => void) => {
-        setConfirmAction(() => onConfirm);
-        setShowConfirmDialog(true);
     };
 
     useEffect(() => {
@@ -157,56 +149,61 @@ export default function ReaderScreen() {
         };
     }, []);
 
-    const handleStartReading = () => {
-        startSession(bookId!, isReadium ? readiumPosition || book?.currentPage || 0 : currentPageIndex);
-        setIsReading(true);
-        showToast('Reading session started', 'success');
-    };
-
-    // Start the session automatically once, when the book has loaded. Guarded by a
-    // ref so ending a session (isReading -> false) doesn't immediately restart it.
-    const autoStartedRef = useRef(false);
+    // Latest reading position, read by session callbacks that outlive the render
+    // they were created in (AppState listener and unmount cleanup).
+    const positionRef = useRef({ isReadium: false, isPdf: false, position: 0, total: 0 });
     useEffect(() => {
-        if (fileType !== 'unknown' && !loading && bookId && !autoStartedRef.current) {
-            autoStartedRef.current = true;
-            handleStartReading();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fileType, loading, bookId]);
+        positionRef.current = {
+            isReadium,
+            isPdf: fileType === 'pdf',
+            position: isReadium ? readiumPosition : currentPageIndex,
+            total: isReadium ? readiumTotalPositions : pages.length,
+        };
+    });
 
-    const handleEndReading = async () => {
-        try {
-            await endSession(isReadium ? readiumPosition : currentPageIndex);
-            setIsReading(false);
+    const bookLoaded = fileType !== 'unknown' && !loading && !!bookId;
 
-            if (bookId) {
-                try {
-                    // Each format tracks position differently; a total of 0 means
-                    // "not loaded yet", which must never count as completed.
-                    const isCompleted = isReadium
-                        ? readiumTotalPositions > 0 && readiumPosition >= readiumTotalPositions
-                        : pages.length > 0 && currentPageIndex >= pages.length - 1;
+    // Sessions run while the reader is open and in the foreground; they are saved
+    // when the reader closes or the app goes to the background.
+    useEffect(() => {
+        if (!bookLoaded) return;
 
-                    await updateBook(bookId, {
-                        currentPage: isReadium ? readiumPosition : currentPageIndex,
-                        totalPages: isReadium ? readiumTotalPositions : pages.length,
-                        status: isCompleted ? 'completed' : 'reading',
-                    });
-                } catch (error) {
-                    console.error('Error updating book on session end:', error);
-                }
+        const beginSession = () => {
+            const { isReadium: readium, position } = positionRef.current;
+            const savedPosition = useBooksStore.getState().books[bookId]?.currentPage ?? 0;
+            startSession(bookId, readium ? position || savedPosition : position);
+        };
+
+        const finishSession = async () => {
+            const { isReadium: readium, isPdf, position, total } = positionRef.current;
+            try {
+                await endSession(position);
+                // A total of 0 means "not loaded yet", which must never count as completed.
+                // TXT pages count from 0, and Readium never reports a PDF's last page.
+                const isCompleted = readium && !isPdf
+                    ? total > 0 && position >= total
+                    : total > 0 && position >= total - 1;
+                await updateBook(bookId, {
+                    currentPage: position,
+                    totalPages: total,
+                    status: isCompleted ? 'completed' : 'reading',
+                });
+            } catch (error) {
+                console.error('Error saving reading session:', error);
             }
-            showToast('Reading session saved', 'success');
-        } catch (error) {
-            console.error('Error saving session:', error);
-            showToast('Failed to save reading session', 'error');
-        }
-    };
+        };
 
-    const handleEndReadingAndClose = async () => {
-        await handleEndReading();
-        setTimeout(() => router.back(), 500);
-    };
+        beginSession();
+        const subscription = AppState.addEventListener('change', state => {
+            if (state === 'background') finishSession();
+            else if (state === 'active' && !useReadingStore.getState().currentSession) beginSession();
+        });
+
+        return () => {
+            subscription.remove();
+            finishSession();
+        };
+    }, [bookLoaded, bookId, startSession, endSession, updateBook]);
 
     const handlePreviousPage = async () => {
         if (currentPageIndex > 0 && !pageTransitioning) {
@@ -253,17 +250,7 @@ export default function ReaderScreen() {
         }
     };
 
-    const handleBackPress = () => {
-        if (isReading) {
-            showConfirm('Save your reading session?', async () => {
-                await handleEndReading();
-                setShowConfirmDialog(false);
-                router.back();
-            });
-        } else {
-            router.back();
-        }
-    };
+    const handleBackPress = () => router.back();
 
     // ─── Progress ─────────────────────────────────────────────────────────────
 
@@ -366,59 +353,34 @@ export default function ReaderScreen() {
                 )}
             </View>
 
-            {/* Footer — session button + format-specific nav */}
-            <View style={styles.footer}>
-                <TouchableOpacity
-                    style={[styles.sessionButton, isReading && styles.sessionButtonActive]}
-                    onPress={isReading ? handleEndReadingAndClose : handleStartReading}
-                >
-                    <MaterialIcons
-                        name={isReading ? 'stop-circle' : 'play-circle'}
-                        size={20}
-                        color={Colors.white}
-                    />
-                    <Text style={styles.sessionButtonText}>
-                        {isReading ? 'End Reading' : 'Start Reading'}
-                    </Text>
-                </TouchableOpacity>
+            {/* Footer — format-specific nav */}
+            {fileType !== 'unknown' && (
+                <View style={styles.footer}>
+                    {fileType === 'txt' && (
+                        <TxtNavigation
+                            currentPage={currentPageIndex}
+                            totalPages={pages.length}
+                            isTransitioning={pageTransitioning}
+                            onPreviousPage={handlePreviousPage}
+                            onNextPage={handleNextPage}
+                        />
+                    )}
 
-                {fileType === 'txt' && (
-                    <TxtNavigation
-                        currentPage={currentPageIndex}
-                        totalPages={pages.length}
-                        isTransitioning={pageTransitioning}
-                        onPreviousPage={handlePreviousPage}
-                        onNextPage={handleNextPage}
-                    />
-                )}
+                    {fileType === 'pdf' && (
+                        <PdfNavigation
+                            isHorizontal={isPdfHorizontal}
+                            onToggleOrientation={() => setIsPdfHorizontal(!isPdfHorizontal)}
+                            onJumpToPage={() => setShowJumpToPageModal(true)}
+                        />
+                    )}
 
-                {fileType === 'pdf' && (
-                    <PdfNavigation
-                        isHorizontal={isPdfHorizontal}
-                        onToggleOrientation={() => setIsPdfHorizontal(!isPdfHorizontal)}
-                        onJumpToPage={() => setShowJumpToPageModal(true)}
-                    />
-                )}
-
-                {fileType === 'epub' && (
-                    <EpubNavigationBar readerRef={readiumRef} />
-                )}
-            </View>
+                    {fileType === 'epub' && (
+                        <EpubNavigationBar readerRef={readiumRef} />
+                    )}
+                </View>
+            )}
 
             <Toast visible={toast.visible} message={toast.message} type={toast.type} />
-
-            <ConfirmationDialog
-                visible={showConfirmDialog}
-                title="End Reading?"
-                message="Do you want to save your reading session?"
-                onCancel={() => {
-                    setShowConfirmDialog(false);
-                    router.back();
-                }}
-                onConfirm={() => confirmAction()}
-                confirmText="Save"
-                cancelText="Discard"
-            />
 
             <JumpToPageModal
                 visible={showJumpToPageModal}
@@ -529,23 +491,5 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: Colors.lightGray,
         gap: Spacing.md,
-    },
-    sessionButton: {
-        backgroundColor: Colors.primary,
-        borderRadius: BorderRadius.full,
-        paddingHorizontal: Spacing.xl,
-        paddingVertical: Spacing.md,
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: Spacing.md,
-    },
-    sessionButtonActive: {
-        backgroundColor: '#FF4444',
-    },
-    sessionButtonText: {
-        ...TextStyles.body,
-        color: Colors.white,
-        fontWeight: '600',
     },
 });

@@ -37,6 +37,9 @@ interface ReadiumReaderProps {
     onToast: (message: string, type: 'error' | 'success' | 'info') => void;
 }
 
+// Readium's PDF adapter reports every page one too high, so page 1 arrives as position 2.
+const pdfPageFromReported = (reported: number): number => Math.max(1, reported - 1);
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const ReadiumReader = forwardRef<ReadiumReaderHandle, ReadiumReaderProps>(function ReadiumReader(
@@ -70,9 +73,20 @@ export const ReadiumReader = forwardRef<ReadiumReaderHandle, ReadiumReaderProps>
         format === 'pdf' ? { scroll: true, scrollAxis } : { fontSize };
 
     const goToPosition = useCallback((position: number) => {
-        const target = positionsRef.current[position - 1];
-        if (target) readiumRef.current?.goTo(target);
-    }, []);
+        const positions = positionsRef.current;
+        const page = Math.min(Math.max(1, Math.round(position)), positions.length);
+        if (page < 1) return;
+
+        if (format !== 'pdf') {
+            readiumRef.current?.goTo(positions[page - 1]);
+        } else if (page < positions.length) {
+            readiumRef.current?.goTo(positions[page]);
+        } else {
+            // There is no locator past the last one, so land on the page before and step forward.
+            readiumRef.current?.goTo(positions[page - 1]);
+            setTimeout(() => readiumRef.current?.goForward(), 300);
+        }
+    }, [format]);
 
     // Expose actions to parent via ref — no state updates in parent render
     useImperativeHandle(ref, () => ({
@@ -103,20 +117,30 @@ export const ReadiumReader = forwardRef<ReadiumReaderHandle, ReadiumReaderProps>
         }).start();
     }, [showTocModal, drawerAnim]);
 
+    // The latest locator not yet written to storage, saved immediately if the reader closes.
+    const pendingLocatorRef = useRef<Locator | null>(null);
+
+    const saveLocator = useCallback(() => {
+        const pending = pendingLocatorRef.current;
+        if (!pending) return;
+        pendingLocatorRef.current = null;
+        updateBook(bookId, { epubLocator: JSON.stringify(pending) }).catch(console.error);
+    }, [bookId, updateBook]);
+
     useEffect(() => {
         return () => {
             if (locatorDebounceRef.current) clearTimeout(locatorDebounceRef.current);
+            saveLocator();
         };
-    }, []);
+    }, [saveLocator]);
 
     const handleLocationChange = (locator: Locator) => {
-        const pos = locator?.locations?.position ?? 0;
-        setCurrentPosition(pos);
+        const reported = locator?.locations?.position ?? 0;
+        setCurrentPosition(format === 'pdf' ? pdfPageFromReported(reported) : reported);
         setLocator(locator);
+        pendingLocatorRef.current = locator;
         if (locatorDebounceRef.current) clearTimeout(locatorDebounceRef.current);
-        locatorDebounceRef.current = setTimeout(() => {
-            updateBook(bookId, { epubLocator: JSON.stringify(locator) }).catch(console.error);
-        }, 500);
+        locatorDebounceRef.current = setTimeout(saveLocator, 500);
     };
 
     const handlePublicationReady = (event: PublicationReadyEvent) => {
@@ -124,10 +148,13 @@ export const ReadiumReader = forwardRef<ReadiumReaderHandle, ReadiumReaderProps>
         const total = positionsRef.current.length;
         setTotalPositions(total);
         setTableOfContents(event.tableOfContents ?? []);
-        if (locator && readiumRef.current?.goTo) {
+
+        if (format === 'pdf') {
+            const savedPosition = locator?.locations?.position;
+            const page = savedPosition ? pdfPageFromReported(savedPosition) : initialPosition ?? 1;
+            if (page > 1) setTimeout(() => goToPosition(page), 500);
+        } else if (locator && readiumRef.current?.goTo) {
             setTimeout(() => readiumRef.current?.goTo(locator!), 500);
-        } else if (initialPosition && initialPosition > 1) {
-            setTimeout(() => goToPosition(initialPosition), 500);
         }
     };
 

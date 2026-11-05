@@ -9,6 +9,7 @@ interface ConfirmationDialogProps {
     onConfirm: () => void;
     confirmText?: string;
     cancelText?: string;
+    destructive?: boolean;
 }
 
 export function ConfirmationDialog({
@@ -17,8 +18,9 @@ export function ConfirmationDialog({
     message,
     onCancel,
     onConfirm,
-    confirmText = 'Save',
-    cancelText = 'Discard',
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
+    destructive = false,
 }: ConfirmationDialogProps) {
     return (
         <Modal
@@ -41,7 +43,11 @@ export function ConfirmationDialog({
                         </TouchableOpacity>
 
                         <TouchableOpacity
-                            style={[styles.modalButton, styles.modalButtonConfirm]}
+                            style={[
+                                styles.modalButton,
+                                styles.modalButtonConfirm,
+                                destructive && styles.modalButtonDestructive,
+                            ]}
                             onPress={onConfirm}
                         >
                             <Text style={styles.modalButtonText}>{confirmText}</Text>
@@ -97,6 +103,9 @@ const styles = StyleSheet.create({
     },
     modalButtonConfirm: {
         backgroundColor: Colors.primary,
+    },
+    modalButtonDestructive: {
+        backgroundColor: Colors.error,
     },
     modalButtonText: {
         ...TextStyles.body,

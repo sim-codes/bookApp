@@ -12,3 +12,5 @@ minimumReleaseAgeExclude:
 # pnpm 11 fails the install when a dependency has an unreviewed install script.
 allowBuilds:
   esbuild: true
+patchedDependencies:
+  react-native-readium@5.3.0: patches/react-native-readium@5.3.0.patch
