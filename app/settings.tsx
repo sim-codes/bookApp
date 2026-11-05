@@ -1,12 +1,11 @@
 import { ConfirmationDialog } from '@/components';
 import { Toast } from '@/components/reader/Toast';
-import { BorderRadius, Colors, PRIVACY_POLICY_URL, Spacing, TextStyles } from '@/constants';
+import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
 import { clearAllData } from '@/services';
 import { useBooksStore, useReadingStore } from '@/stores';
 import { MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { ComponentProps, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -89,7 +88,7 @@ export default function SettingsScreen() {
                     <SettingsRow
                         icon="privacy-tip"
                         label="Privacy Policy"
-                        onPress={() => WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL)}
+                        onPress={() => router.push('/privacy')}
                     />
                 </View>
             </ScrollView>

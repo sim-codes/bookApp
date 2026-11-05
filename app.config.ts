@@ -83,6 +83,7 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
     "./plugins/withAndroidDesugaring",
     "./plugins/withNetworkSecurityConfig",
     "./plugins/withReadiumKotlinOptIn",
+    "./plugins/withHiddenReadiumPositionLabel",
     [
       "expo-build-properties",
       {
