@@ -1,7 +1,21 @@
 import { bookFiles, booksStorage, progressStorage } from '@/services';
+import { syncEngine } from '@/services/sync';
 import { Book, LocalLibrary } from '@/types';
-import { generateId } from '@/utils';
+import { newId } from '@/utils';
 import { create } from 'zustand';
+
+const DETAIL_FIELDS: (keyof Book)[] = ['title', 'author', 'genre', 'coverUri', 'isPublic', 'isShareable'];
+const PROGRESS_FIELDS: (keyof Book)[] = ['currentPage', 'totalPages', 'epubLocator', 'status'];
+
+// Sync compares these times with what it last sent, so each kind of change is stamped separately.
+function stampChanges(updates: Partial<Book>, now: number): Partial<Book> {
+    const touches = (fields: (keyof Book)[]) => fields.some(field => field in updates);
+    return {
+        ...updates,
+        ...(touches(DETAIL_FIELDS) && { detailsUpdatedAt: now }),
+        ...(touches(PROGRESS_FIELDS) && { progressUpdatedAt: now }),
+    };
+}
 
 interface BooksStore {
     books: LocalLibrary;
@@ -36,11 +50,14 @@ export const useBooksStore = create<BooksStore>((set, get) => ({
     },
 
     addBook: async (bookData) => {
+        const now = Date.now();
         const newBook: Book = {
-            id: generateId(),
+            id: newId(),
             ...bookData,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
+            createdAt: now,
+            updatedAt: now,
+            detailsUpdatedAt: now,
+            progressUpdatedAt: now,
         };
 
         try {
@@ -51,6 +68,7 @@ export const useBooksStore = create<BooksStore>((set, get) => ({
                     [newBook.id]: newBook,
                 },
             }));
+            syncEngine.schedule();
             return newBook;
         } catch (error) {
             console.error('Error adding book:', error);
@@ -64,11 +82,13 @@ export const useBooksStore = create<BooksStore>((set, get) => ({
             await booksStorage.delete(bookId);
             await progressStorage.delete(bookId);
             await bookFiles.remove(book?.fileUri, book?.coverUri);
+            await syncEngine.recordDeletion(bookId);
             set((state) => {
                 const newBooks = { ...state.books };
                 delete newBooks[bookId];
                 return { books: newBooks };
             });
+            syncEngine.schedule();
         } catch (error) {
             console.error('Error deleting book:', error);
             throw error;
@@ -79,7 +99,7 @@ export const useBooksStore = create<BooksStore>((set, get) => ({
         try {
             // Merge against the latest stored copy (serialized in storage) rather than
             // this store's snapshot, so overlapping updates can't overwrite each other.
-            const updatedBook = await booksStorage.update(bookId, updates);
+            const updatedBook = await booksStorage.update(bookId, stampChanges(updates, Date.now()));
             if (!updatedBook) throw new Error('Book not found');
 
             set((state) => ({
@@ -88,6 +108,7 @@ export const useBooksStore = create<BooksStore>((set, get) => ({
                     [bookId]: updatedBook,
                 },
             }));
+            syncEngine.schedule();
         } catch (error) {
             console.error('Error updating book:', error);
             throw error;

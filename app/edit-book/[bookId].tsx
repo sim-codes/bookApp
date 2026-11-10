@@ -1,9 +1,9 @@
 import { ConfirmationDialog } from '@/components';
-import { BookDetailsFields, CoverAction, CoverEditor, SharingFields, SharingValue, sharingError } from '@/components/book';
+import { BookDetailsFields, CoverAction, CoverEditor, SharingFields, SharingValue, sharingError, sharingFlags } from '@/components/book';
 import { Toast } from '@/components/reader/Toast';
-import { BorderRadius, Colors, FEATURES, Spacing, TextStyles, Typography } from '@/constants';
+import { BorderRadius, Colors, Spacing, TextStyles, Typography } from '@/constants';
 import { bookFiles, extractBookMetadata } from '@/services';
-import { useBooksStore } from '@/stores';
+import { useBooksStore, useFeatureStore } from '@/stores';
 import { pickCoverImage } from '@/utils/pickCoverImage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -26,10 +26,11 @@ export default function EditBookScreen() {
     const [title, setTitle] = useState(book?.title ?? '');
     const [author, setAuthor] = useState(book?.author === 'Unknown Author' ? '' : book?.author ?? '');
     const [genre, setGenre] = useState(book?.genre === 'Unknown' ? '' : book?.genre ?? '');
+    const communityLibrary = useFeatureStore(state => state.communityLibrary);
     const [sharing, setSharing] = useState<SharingValue>({
-        visibility: book?.visibility ?? 'private',
-        access: book?.access ?? 'paid',
-        rightsConfirmed: book?.visibility === 'public' && book?.access === 'free',
+        isPublic: !!book?.isPublic,
+        isShareable: !!book?.isShareable,
+        rightsConfirmed: !!book?.isShareable,
     });
     // undefined: keep the current cover; null: remove it; string: replace it with this image.
     const [newCoverUri, setNewCoverUri] = useState<string | null | undefined>(undefined);
@@ -109,8 +110,7 @@ export default function EditBookScreen() {
                 title: title.trim(),
                 author: author.trim() || 'Unknown Author',
                 genre: genre || 'Unknown',
-                visibility: sharing.visibility,
-                access: sharing.visibility === 'public' ? sharing.access : undefined,
+                ...sharingFlags(sharing),
                 ...(newCoverUri !== undefined && { coverUri: storedCoverUri }),
             });
 
@@ -160,7 +160,7 @@ export default function EditBookScreen() {
                     onGenreChange={setGenre}
                 />
 
-                {FEATURES.communityLibrary && <SharingFields value={sharing} onChange={setSharing} />}
+                {communityLibrary && <SharingFields value={sharing} onChange={setSharing} />}
 
                 <TouchableOpacity
                     style={[styles.saveButton, isBusy && styles.buttonDisabled]}

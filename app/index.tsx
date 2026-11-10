@@ -1,7 +1,7 @@
 import { BookCard } from '@/components';
 import { DeckActions, LibraryScope, LibraryToggle, ReadingStatChips } from '@/components/home';
-import { BorderRadius, Colors, FEATURES, Spacing, TextStyles } from '@/constants';
-import { useBooksStore, useReadingStore } from '@/stores';
+import { BorderRadius, Colors, Spacing, TextStyles } from '@/constants';
+import { useBooksStore, useFeatureStore, useReadingStore } from '@/stores';
 import { bookProgress, sortBooksByActivity } from '@/utils';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -14,6 +14,7 @@ export default function HomeScreen() {
   const { books, loadBooks } = useBooksStore();
   const { stats, loadStats } = useReadingStore();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const communityLibrary = useFeatureStore(state => state.communityLibrary);
   const [scope, setScope] = useState<LibraryScope>('mine');
   // Most recent activity first, so a newly added or just-read book tops the deck.
   const bookList = useMemo(() => sortBooksByActivity(Object.values(books)), [books]);
@@ -41,7 +42,7 @@ export default function HomeScreen() {
     setCurrentIndex(index => (index < bookList.length - 1 ? index + 1 : 0));
   };
 
-  const showingMine = !FEATURES.communityLibrary || scope === 'mine';
+  const showingMine = !communityLibrary || scope === 'mine';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -56,7 +57,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {FEATURES.communityLibrary && (
+      {communityLibrary && (
         <View style={styles.toggle}>
           <LibraryToggle value={scope} onChange={setScope} />
         </View>

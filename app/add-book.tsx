@@ -1,10 +1,10 @@
-import { BookDetailsFields, CoverAction, CoverEditor, SharingFields, SharingValue, sharingError } from '@/components/book';
+import { BookDetailsFields, CoverAction, CoverEditor, SharingFields, SharingValue, sharingError, sharingFlags } from '@/components/book';
 import { Toast } from '@/components/reader/Toast';
-import { BorderRadius, Colors, FEATURES, Spacing, TextStyles, Typography } from '@/constants';
+import { BorderRadius, Colors, Spacing, TextStyles, Typography } from '@/constants';
 import { bookFiles, extractBookMetadata } from '@/services';
-import { useBooksStore } from '@/stores';
+import { useBooksStore, useFeatureStore } from '@/stores';
 import { Book } from '@/types';
-import { generateId, getTodayDate } from '@/utils';
+import { getTodayDate, newId } from '@/utils';
 import { pickCoverImage } from '@/utils/pickCoverImage';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -33,7 +33,8 @@ export default function AddBookScreen() {
     const [title, setTitle] = useState('');
     const [author, setAuthor] = useState('');
     const [selectedGenre, setSelectedGenre] = useState('');
-    const [sharing, setSharing] = useState<SharingValue>({ visibility: 'private', access: 'paid', rightsConfirmed: false });
+    const communityLibrary = useFeatureStore(state => state.communityLibrary);
+    const [sharing, setSharing] = useState<SharingValue>({ isPublic: false, isShareable: false, rightsConfirmed: false });
     const [fileCoverUri, setFileCoverUri] = useState<string | null>(null);
     const [customCoverUri, setCustomCoverUri] = useState<string | null>(null);
     const [fileUri, setFileUri] = useState<string | null>(null);
@@ -134,7 +135,7 @@ export default function AddBookScreen() {
 
         setIsLoading(true);
 
-        const bookId = generateId();
+        const bookId = newId();
         let storedFileUri: string | undefined;
         let storedCoverUri: string | undefined;
 
@@ -157,8 +158,7 @@ export default function AddBookScreen() {
                 totalPages: undefined,
                 currentPage: 0,
                 status: 'reading',
-                visibility: sharing.visibility,
-                access: sharing.visibility === 'public' ? sharing.access : undefined,
+                ...sharingFlags(sharing),
                 addedDate: getTodayDate(),
             };
 
@@ -240,7 +240,7 @@ export default function AddBookScreen() {
                     }}
                 />
 
-                {FEATURES.communityLibrary && <SharingFields value={sharing} onChange={setSharing} />}
+                {communityLibrary && <SharingFields value={sharing} onChange={setSharing} />}
 
                 {/* Save Button */}
                 <TouchableOpacity

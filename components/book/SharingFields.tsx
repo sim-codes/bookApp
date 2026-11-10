@@ -1,20 +1,24 @@
 import { BorderRadius, Colors, Spacing, TextStyles, Typography } from '@/constants';
-import { BookAccess, BookVisibility } from '@/types';
 import { MaterialIcons } from '@expo/vector-icons';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 export interface SharingValue {
-    visibility: BookVisibility;
-    access: BookAccess;
+    isPublic: boolean;
+    isShareable: boolean;
     rightsConfirmed: boolean;
 }
 
 /** Returns why the sharing choices can't be saved, or null when they can. */
-export function sharingError({ visibility, access, rightsConfirmed }: SharingValue): string | null {
-    if (visibility === 'public' && access === 'free' && !rightsConfirmed) {
-        return 'Confirm you have the right to share this book for free';
+export function sharingError({ isPublic, isShareable, rightsConfirmed }: SharingValue): string | null {
+    if (isPublic && isShareable && !rightsConfirmed) {
+        return 'Confirm you have the right to let others read this book';
     }
     return null;
+}
+
+/** The flags to save: a book can only be shareable while it is visible to others. */
+export function sharingFlags({ isPublic, isShareable }: SharingValue): { isPublic: boolean; isShareable: boolean } {
+    return { isPublic, isShareable: isPublic && isShareable };
 }
 
 interface SharingFieldsProps {
@@ -22,53 +26,45 @@ interface SharingFieldsProps {
     onChange: (value: SharingValue) => void;
 }
 
-/** Whether a book is shared with other readers, and whether they can read it for free. */
+/** Whether other readers can see a book, and whether they can add it to their own library. */
 export function SharingFields({ value, onChange }: SharingFieldsProps) {
-    const isPublic = value.visibility === 'public';
-
     return (
         <View style={styles.section}>
             <View style={styles.switchRow}>
                 <View style={styles.switchText}>
-                    <Text style={styles.label}>Share with other readers</Text>
+                    <Text style={styles.label}>Visible to other readers</Text>
                     <Text style={styles.hint}>
                         Others see the cover, title and author. Your reading progress stays private.
                     </Text>
                 </View>
                 <Switch
-                    value={isPublic}
-                    onValueChange={on => onChange({ ...value, visibility: on ? 'public' : 'private' })}
+                    value={value.isPublic}
+                    onValueChange={on => onChange({ ...value, isPublic: on, isShareable: on && value.isShareable })}
                     trackColor={{ true: Colors.primary, false: Colors.mediumGray }}
                     thumbColor={Colors.white}
-                    accessibilityLabel="Share with other readers"
+                    accessibilityLabel="Visible to other readers"
                 />
             </View>
 
-            {isPublic && (
+            {value.isPublic && (
                 <>
-                    <View style={styles.accessRow}>
-                        {(['paid', 'free'] as BookAccess[]).map(option => {
-                            const selected = value.access === option;
-                            return (
-                                <TouchableOpacity
-                                    key={option}
-                                    style={[styles.accessButton, selected && styles.accessButtonSelected]}
-                                    onPress={() => onChange({ ...value, access: option })}
-                                    accessibilityState={{ selected }}
-                                >
-                                    <Text style={[styles.accessText, selected && styles.accessTextSelected]}>
-                                        {option === 'free' ? 'Free to read' : 'Paid book'}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
+                    <View style={styles.switchRow}>
+                        <View style={styles.switchText}>
+                            <Text style={styles.label}>Let others add it to their library</Text>
+                            <Text style={styles.hint}>
+                                Readers can save a copy of your file and read it in the app.
+                            </Text>
+                        </View>
+                        <Switch
+                            value={value.isShareable}
+                            onValueChange={on => onChange({ ...value, isShareable: on })}
+                            trackColor={{ true: Colors.primary, false: Colors.mediumGray }}
+                            thumbColor={Colors.white}
+                            accessibilityLabel="Let others add it to their library"
+                        />
                     </View>
 
-                    {value.access === 'paid' ? (
-                        <Text style={styles.hint}>
-                            Others can preview it and save it to read later, but can&apos;t download your file.
-                        </Text>
-                    ) : (
+                    {value.isShareable && (
                         <TouchableOpacity
                             style={styles.confirmRow}
                             onPress={() => onChange({ ...value, rightsConfirmed: !value.rightsConfirmed })}
@@ -82,7 +78,7 @@ export function SharingFields({ value, onChange }: SharingFieldsProps) {
                             />
                             <Text style={styles.confirmText}>
                                 I have the right to share this file. It&apos;s in the public domain or openly
-                                licensed, so others may read it for free.
+                                licensed, so others may read it.
                             </Text>
                         </TouchableOpacity>
                     )}
@@ -117,30 +113,6 @@ const styles = StyleSheet.create({
     hint: {
         ...TextStyles.caption,
         color: Colors.textLight,
-    },
-    accessRow: {
-        flexDirection: 'row',
-        gap: Spacing.md,
-    },
-    accessButton: {
-        flex: 1,
-        paddingVertical: Spacing.md,
-        borderRadius: BorderRadius.md,
-        borderWidth: 1,
-        borderColor: Colors.mediumGray,
-        alignItems: 'center',
-    },
-    accessButtonSelected: {
-        backgroundColor: Colors.primary,
-        borderColor: Colors.primary,
-    },
-    accessText: {
-        ...TextStyles.body,
-        fontFamily: Typography.fontFamily.semibold,
-        color: Colors.textDark,
-    },
-    accessTextSelected: {
-        color: Colors.white,
     },
     confirmRow: {
         flexDirection: 'row',

@@ -21,6 +21,15 @@ async function ensureDir(): Promise<void> {
     }
 }
 
+async function download(url: string, dest: string): Promise<string> {
+    const result = await FileSystem.downloadAsync(url, dest);
+    if (result.status !== 200) {
+        await FileSystem.deleteAsync(dest, { idempotent: true });
+        throw new Error(`Download failed with status ${result.status}`);
+    }
+    return result.uri;
+}
+
 export const bookFiles = {
     /** True if the URI already lives in the permanent books directory. */
     isPersisted(uri?: string): boolean {
@@ -51,6 +60,29 @@ export const bookFiles = {
             encoding: FileSystem.EncodingType.Base64,
         });
         return uri;
+    },
+
+    /** Download a synced book's file into permanent storage and return its URI. */
+    async downloadBook(url: string, bookId: string, fileName: string | undefined): Promise<string> {
+        await ensureDir();
+        return download(url, `${BOOKS_DIR}${bookId}.${getExtension(fileName ?? '', 'bin')}`);
+    },
+
+    /** Download a synced book's cover into permanent storage and return its URI. */
+    async downloadCover(url: string, bookId: string): Promise<string> {
+        await ensureDir();
+        return download(url, `${BOOKS_DIR}${bookId}_cover_${generateId()}.jpg`);
+    },
+
+    /** Send a local file's bytes to a presigned upload URL. */
+    async upload(url: string, uri: string): Promise<void> {
+        const result = await FileSystem.uploadAsync(url, uri, {
+            httpMethod: 'PUT',
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        });
+        if (result.status < 200 || result.status >= 300) {
+            throw new Error(`Upload failed with status ${result.status}`);
+        }
     },
 
     /** Best-effort delete of files we own; ignores URIs outside the books directory. */
