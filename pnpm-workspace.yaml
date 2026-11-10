@@ -12,3 +12,5 @@ minimumReleaseAgeExclude:
 # pnpm 11 fails the install when a dependency has an unreviewed install script.
 allowBuilds:
   esbuild: true
+  # Ships prebuilt binaries and is only used by Jest's watch mode, so its build step is not needed.
+  '@parcel/watcher': false
