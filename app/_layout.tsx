@@ -1,3 +1,4 @@
+import { useAppSync } from '@/hooks';
 import { useFonts } from 'expo-font';
 import { Stack } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
@@ -12,6 +13,7 @@ export default function RootLayout() {
     'Poppins-SemiBold': require('../assets/fonts/Poppins-SemiBold.ttf'),
     'Modak-Regular': require('../assets/fonts/Modak-Regular.ttf'),
   });
+  useAppSync();
 
   useEffect(() => {
     if (fontsLoaded) {

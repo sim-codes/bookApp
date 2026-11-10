@@ -1,6 +1,11 @@
+import { AccountCard } from '@/components/account';
 import { BookListItem } from '@/components/book';
+import { Toast } from '@/components/reader/Toast';
 import { Colors, Spacing, TextStyles, Typography } from '@/constants';
-import { useBooksStore } from '@/stores';
+import { useToast } from '@/hooks';
+import { isApiConfigured } from '@/services/api';
+import { syncEngine } from '@/services/sync';
+import { useAuthStore, useBooksStore } from '@/stores';
 import { sortBooksByActivity } from '@/utils';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -15,6 +20,22 @@ export default function ProfileScreen() {
     const books = useBooksStore(state => state.books);
     const bookList = useMemo(() => sortBooksByActivity(Object.values(books)), [books]);
     const preview = bookList.slice(0, PREVIEW_COUNT);
+    const user = useAuthStore(state => state.user);
+    const signOut = useAuthStore(state => state.signOut);
+    const { toast, show } = useToast();
+
+    const syncNow = async () => {
+        await syncEngine.run();
+        const { state } = syncEngine.getStatus();
+        if (state === 'idle') show('Your library is up to date', 'success');
+        else if (state === 'offline') show("You're offline. We'll sync when you're back online.", 'info');
+        else show("Couldn't sync right now. Please try again later.", 'error');
+    };
+
+    const handleSignOut = async () => {
+        await signOut();
+        show('Signed out. Your books stay on this device.', 'success');
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -29,6 +50,15 @@ export default function ProfileScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
+                {isApiConfigured() && (
+                    <AccountCard
+                        user={user}
+                        onSignIn={() => router.push('/sign-in')}
+                        onSyncNow={syncNow}
+                        onSignOut={handleSignOut}
+                    />
+                )}
+
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>
                         My Books{bookList.length > 0 ? ` (${bookList.length})` : ''}
@@ -56,6 +86,8 @@ export default function ProfileScreen() {
                     </View>
                 )}
             </ScrollView>
+
+            <Toast visible={toast.visible} message={toast.message} type={toast.type} />
         </SafeAreaView>
     );
 }

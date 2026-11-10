@@ -1,8 +1,7 @@
-export type BookVisibility = 'private' | 'public';
-export type BookAccess = 'free' | 'paid';
+export type ReadingStatus = 'reading' | 'completed' | 'paused';
 
 export interface Book {
-    id: string;
+    id: string;         // UUID, shared with the server once the book is synced
     title: string;
     author: string;
     genre?: string;
@@ -12,12 +11,14 @@ export interface Book {
     totalPages?: number;
     currentPage?: number;
     epubLocator?: string;       // JSON stringified Locator for EPUB
-    status?: 'reading' | 'completed' | 'paused';
-    visibility?: BookVisibility; // Missing means private
-    access?: BookAccess;         // Only meaningful for public books
+    status?: ReadingStatus;
+    isPublic?: boolean;         // Other readers can see it
+    isShareable?: boolean;      // Other readers can add it to their library and download it; requires isPublic
     addedDate?: string; // YYYY-MM-DD format
     createdAt?: number;  // Timestamp
     updatedAt?: number;
+    detailsUpdatedAt?: number;  // Last local change to title, author, genre, cover or sharing
+    progressUpdatedAt?: number; // Last local change to page, locator or status
 }
 
 export interface BookProgress {

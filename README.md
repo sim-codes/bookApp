@@ -8,6 +8,7 @@ A feature-rich React Native mobile application for reading and managing books wi
 - [Project Structure](#project-structure)
 - [Installation](#installation)
 - [Running the App](#running-the-app)
+- [Backend and Sync](#backend-and-sync)
 - [Important: Development Build Required](#important-development-build-required)
 - [Key Architecture Decisions](#key-architecture-decisions)
 - [Tech Stack](#tech-stack)
@@ -60,11 +61,14 @@ bookApp/
 │   ├── my-books.tsx             # Full list of the user's books
 │   ├── profile.tsx              # Profile with recent books preview
 │   ├── settings.tsx             # Data deletion, version, privacy policy
+│   ├── sign-in.tsx              # Email code sign-in
 │   ├── reader/
 │   │   ├── _layout.tsx
 │   │   └── [bookId].tsx         # EPUB/PDF/TXT reader with automatic session tracking
 │   └── _layout.tsx              # Root layout
 ├── components/                   # Reusable UI components
+│   ├── account/
+│   │   └── AccountCard.tsx      # Sign-in prompt, or account, sync status and sign-out
 │   ├── BookCard.tsx             # Swipeable deck card with cover and details overlay
 │   ├── ConfirmationDialog.tsx   # Reusable confirmation modal
 │   ├── GeneratedCover.tsx       # Cover drawn from title and author
@@ -72,7 +76,7 @@ bookApp/
 │   │   ├── BookDetailsFields.tsx # Title, author and genre inputs
 │   │   ├── BookListItem.tsx     # Book row with cover and progress
 │   │   ├── CoverEditor.tsx      # Cover preview with change/remove actions
-│   │   └── SharingFields.tsx    # Share with other readers, free or paid
+│   │   └── SharingFields.tsx    # Visible to other readers, and whether they can add it to their library
 │   ├── home/                    # Home screen components
 │   │   ├── DeckActions.tsx      # Skip, Read and Add buttons under the deck
 │   │   ├── LibraryToggle.tsx    # Mine / Everyone switch (behind a feature flag)
@@ -89,18 +93,22 @@ bookApp/
 │   ├── spacing.ts               # Spacing and border radius
 │   ├── typography.ts            # Fonts and text styles
 │   ├── genres.ts                # Genre list
-│   ├── features.ts              # Feature flags (community library)
 │   └── links.ts                 # External URLs (privacy policy)
 ├── stores/                       # Zustand state management
-│   ├── booksStore.ts            # Books/library state
+│   ├── booksStore.ts            # Books/library state; stamps changes and schedules sync
 │   ├── readingStore.ts          # Reading sessions, streaks and stats
+│   ├── authStore.ts             # Signed-in user and sign-in actions
+│   ├── featureStore.ts          # Feature flags from the server, cached for offline use
 │   └── uiStore.ts               # UI state
 ├── services/                     # Business logic & services
 │   ├── localStorage.ts          # AsyncStorage persistence
 │   ├── bookFiles.ts             # Copies book and cover files into app storage
 │   ├── bookMetadata.ts          # Picks the metadata reader for a file type
 │   ├── epubMetadata.ts          # EPUB title, author, subjects and cover
-│   └── pdfMetadata.ts           # PDF document properties
+│   ├── pdfMetadata.ts           # PDF document properties
+│   ├── api/                     # HTTP client, tokens, endpoints and error messages for the Spinematch API
+│   └── sync/                    # Two-way sync of books, progress and sessions with the API
+├── hooks/                        # App-wide hooks: sync lifecycle, sync status, toasts
 ├── types/                        # Shared TypeScript types
 ├── utils/                        # Helpers (dates, base64, sorting, cover picking)
 ├── plugins/                      # Expo config plugins for Android build settings
@@ -136,10 +144,37 @@ bookApp/
    ```
 
 3. **Configure environment** (optional)
+   - Copy `.env.example` to `.env` and set `EXPO_PUBLIC_API_BASE_URL` to point the app at a server (see [Backend and Sync](#backend-and-sync))
    - Edit `app.config.ts` for app name, version, permissions and platform-specific settings
    - Native build settings are applied by the config plugins in `plugins/` and `expo-build-properties`
 
 ⚠️ **Important**: The app requires a **development build**. See [Development Build Required](#important-development-build-required) section below.
+
+## Backend and Sync
+
+The app works fully offline. Signing in (Profile → Sign in) backs up the library to the Spinematch API and keeps it in sync across devices.
+
+**Pointing the app at a server.** Set `EXPO_PUBLIC_API_BASE_URL` in `.env` and restart `pnpm start`, because Expo reads it when bundling.
+- In development it defaults to `http://localhost:5155`.
+- For an emulator or USB device, forward the API and file storage ports so `localhost` reaches your machine:
+  ```bash
+  adb reverse tcp:5155 tcp:5155
+  adb reverse tcp:8333 tcp:8333
+  ```
+- A release build without the variable runs offline only, and all server features stay off.
+
+**How it fits together.**
+- `services/api` is the only code that talks HTTP:
+  - Tokens: the refresh token is kept in secure storage and the access token in memory. An expired token is refreshed once and the request retried; concurrent requests share that single refresh.
+  - Errors: failures become an `ApiError` carrying the server's error code. `errorMessage()` turns that into copy for the reader.
+- `services/sync` compares local change times with what was last sent:
+  - Books go up with the same UUID they use on the device, so a retry never makes a duplicate.
+  - Files and covers upload directly to storage through presigned URLs.
+  - Progress and sessions go up next. Then books, edits and progress from other devices come down.
+- Sync runs on launch, when the app returns to the foreground, a couple of seconds after any change, and from **Sync now** on the profile.
+- Feature flags come from `GET /config`. They are cached, and they are off whenever the server is unreachable.
+
+The secure-store and crypto native modules mean the development build must be rebuilt once after pulling this change.
 
 ## Running the App
 
@@ -295,13 +330,19 @@ EPUB and PDF are both rendered by **Readium** (`react-native-readium`) through o
 
 ## Development Workflow
 
+### Tests
+
+```bash
+pnpm test   # Jest: API client, sync decisions and sharing rules
+```
+
 ### Key Screens
 
 **Home Screen** (`app/index.tsx`)
 - Swipeable deck of books, most recently active first
 - Swipe right to read, left or up to skip, or use the Skip, Read and Add buttons
 - Streak and reading time chips; profile and settings from the avatar
-- Mine / Everyone toggle, hidden until `FEATURES.communityLibrary` is enabled
+- Mine / Everyone toggle, shown when the server turns on the `communityLibrary` flag
 
 **Reader Screen** (`app/reader/[bookId].tsx`)
 - Full-featured EPUB/PDF/TXT reader

@@ -1,6 +1,7 @@
 import { booksStorage, sessionsStorage, statsStorage } from '@/services';
+import { syncEngine } from '@/services/sync';
 import { ReadingSession, ReadingStats } from '@/types';
-import { generateId, getTodayDate, getTotalHours, shiftDate } from '@/utils';
+import { getTodayDate, getTotalHours, newId, shiftDate } from '@/utils';
 import { create } from 'zustand';
 
 // Sessions shorter than this are treated as an accidental open/close and ignored.
@@ -48,7 +49,7 @@ export const useReadingStore = create<ReadingStore>((set, get) => ({
 
     startSession: (bookId, pageStart) => {
         const session: ReadingSession = {
-            id: generateId(),
+            id: newId(),
             bookId,
             startTime: Date.now(),
             duration: 0,
@@ -84,6 +85,7 @@ export const useReadingStore = create<ReadingStore>((set, get) => ({
                 await statsStorage.save(stats);
 
                 set({ stats, currentSession: null });
+                syncEngine.schedule();
             } catch (error) {
                 console.error('Error ending session:', error);
                 throw error;

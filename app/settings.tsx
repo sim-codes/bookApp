@@ -2,7 +2,8 @@ import { ConfirmationDialog } from '@/components';
 import { Toast } from '@/components/reader/Toast';
 import { BorderRadius, Colors, Spacing, TextStyles, Typography } from '@/constants';
 import { clearAllData } from '@/services';
-import { useBooksStore, useReadingStore } from '@/stores';
+import { syncEngine } from '@/services/sync';
+import { useAuthStore, useBooksStore, useReadingStore } from '@/stores';
 import { MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
@@ -34,6 +35,8 @@ export default function SettingsScreen() {
     const router = useRouter();
     const loadBooks = useBooksStore(state => state.loadBooks);
     const loadStats = useReadingStore(state => state.loadStats);
+    const signedIn = useAuthStore(state => state.status === 'signedIn');
+    const signOut = useAuthStore(state => state.signOut);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'error' | 'success' | 'info' });
 
@@ -48,6 +51,9 @@ export default function SettingsScreen() {
     const handleDeleteAll = async () => {
         setShowDeleteDialog(false);
         try {
+            // Signing out stops the next sync from bringing the deleted books straight back.
+            if (signedIn) await signOut();
+            await syncEngine.reset();
             await clearAllData();
             await Promise.all([loadBooks(), loadStats()]);
             showToast('All books and reading data deleted', 'success');
@@ -98,7 +104,9 @@ export default function SettingsScreen() {
             <ConfirmationDialog
                 visible={showDeleteDialog}
                 title="Delete everything?"
-                message="All your books, covers, reading progress and streaks will be permanently removed from this device."
+                message={signedIn
+                    ? 'All your books, covers, reading progress and streaks will be removed from this device and you will be signed out. Your backup stays in your account.'
+                    : 'All your books, covers, reading progress and streaks will be permanently removed from this device.'}
                 onCancel={() => setShowDeleteDialog(false)}
                 onConfirm={handleDeleteAll}
                 confirmText="Delete"
