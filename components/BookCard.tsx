@@ -1,9 +1,20 @@
 import { BorderRadius, Colors, Shadows, Spacing, TextStyles, Typography } from '@/constants';
-import { BookCardProps } from '@/types';
 import { toTitleCase } from '@/utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Dimensions, Image, PanResponder, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Image, PanResponder, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { GeneratedCover } from './GeneratedCover';
+
+export interface BookCardProps {
+    title: string;
+    author: string;
+    coverUri?: string;
+    progress?: number;
+    rotation?: number;
+    onSwipeRight?: () => void;
+    onSwipeLeft?: () => void;
+    onSwipeUp?: () => void;
+    style?: StyleProp<ViewStyle>;
+}
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SWIPE_OUT_DURATION = 250;

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BookSyncState, BookSyncStates } from './types';
 
 const KEYS = {
     ACCOUNT: '@bookapp/sync/account',
@@ -8,17 +9,6 @@ const KEYS = {
     READING_CURSOR: '@bookapp/sync/readingCursor',
     LAST_SYNCED_AT: '@bookapp/sync/lastSyncedAt',
 };
-
-/** What the server already has for one book, used to decide what still needs sending. */
-export interface BookSyncState {
-    onServer?: boolean;
-    detailsSyncedAt?: number;
-    progressSyncedAt?: number;
-    fileUploaded?: boolean;
-    uploadedCoverUri?: string;
-}
-
-export type BookSyncStates = Record<string, BookSyncState>;
 
 // Same reason as the library storage: each write is a read-modify-write of one JSON value.
 let writeChain: Promise<unknown> = Promise.resolve();

@@ -1,7 +1,8 @@
 import { ApiReadingState, readingApi, ReadingSessionUpload, ReadingStateRequest } from '@/services/api';
 import { Book, LocalLibrary, ReadingSession } from '@/types';
 import { booksStorage, sessionsStorage } from '../localStorage';
-import { BookSyncState, BookSyncStates, syncStorage } from './syncStorage';
+import { syncStorage } from './syncStorage';
+import { BookSyncState, BookSyncStates } from './types';
 
 const SESSION_BATCH_SIZE = 100;
 const MAX_SESSION_MINUTES = 24 * 60;

@@ -3,13 +3,7 @@ import { booksStorage } from '../localStorage';
 import { pullBooks, pushBook, pushDeletes } from './bookSync';
 import { pullProgress, pushProgress, pushSessions } from './readingSync';
 import { syncStorage } from './syncStorage';
-
-export type SyncState = 'idle' | 'syncing' | 'offline' | 'error' | 'disabled';
-
-export interface SyncStatus {
-    state: SyncState;
-    lastSyncedAt: number | null;
-}
+import { SyncStatus } from './types';
 
 const DEFAULT_DELAY_MS = 2_000;
 

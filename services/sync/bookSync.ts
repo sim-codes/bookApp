@@ -2,14 +2,8 @@ import { ApiBook, ApiError, booksApi, CreateBookRequest, UpdateBookRequest } fro
 import { Book, LocalLibrary } from '@/types';
 import { bookFiles } from '../bookFiles';
 import { booksStorage } from '../localStorage';
-import { BookSyncState, BookSyncStates, syncStorage } from './syncStorage';
-
-export interface BookPushPlan {
-    create: boolean;
-    updateDetails: boolean;
-    uploadFile: boolean;
-    uploadCover: boolean;
-}
+import { syncStorage } from './syncStorage';
+import { BookPushPlan, BookSyncState, BookSyncStates } from './types';
 
 /** Works out what the server is missing for one book, from local change times and what was last sent. */
 export function planBookPush(book: Book, state: BookSyncState = {}): BookPushPlan {
