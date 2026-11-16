@@ -89,6 +89,9 @@ module.exports = ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       {
         android: {
           minSdkVersion: 24,
+          buildArchs: ["armeabi-v7a", "arm64-v8a"],
+          enableMinifyInReleaseBuilds: true,
+          enableShrinkResourcesInReleaseBuilds: true,
           extraProguardRules: [
             "-keep class org.readium.** { *; }",
             "-keep class com.reactnativereadium.** { *; }",

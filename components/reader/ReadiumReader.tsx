@@ -10,7 +10,14 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import type { Link, Locator, Preferences, PublicationReadyEvent, ReadiumViewRef } from 'react-native-readium';
+import type {
+    Link,
+    Locator,
+    Preferences,
+    PublicationReadyEvent,
+    ReadiumViewRef,
+    SelectionAction,
+} from 'react-native-readium';
 import { ReadiumView } from 'react-native-readium';
 
 // ─── Imperative handle ────────────────────────────────────────────────────────
@@ -35,15 +42,19 @@ interface ReadiumReaderProps {
     scrollAxis?: 'horizontal' | 'vertical';
     onPositionChange: (current: number, total: number) => void;
     onToast: (message: string, type: 'error' | 'success' | 'info') => void;
+    onDefine: (selectedText: string) => void;
 }
 
 // Readium's PDF adapter reports every page one too high, so page 1 arrives as position 2.
 const pdfPageFromReported = (reported: number): number => Math.max(1, reported - 1);
 
+const DEFINE_ACTION_ID = 'define';
+const SELECTION_ACTIONS: SelectionAction[] = [{ id: DEFINE_ACTION_ID, label: 'Define' }];
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const ReadiumReader = forwardRef<ReadiumReaderHandle, ReadiumReaderProps>(function ReadiumReader(
-    { fileUri, bookId, format, initialLocator, initialPosition, scrollAxis = 'vertical', onPositionChange, onToast },
+    { fileUri, bookId, format, initialLocator, initialPosition, scrollAxis = 'vertical', onPositionChange, onToast, onDefine },
     ref,
 ) {
     const { updateBook } = useBooksStore();
@@ -172,6 +183,10 @@ export const ReadiumReader = forwardRef<ReadiumReaderHandle, ReadiumReaderProps>
                 preferences={preferences}
                 onLocationChange={handleLocationChange}
                 onPublicationReady={handlePublicationReady}
+                selectionActions={SELECTION_ACTIONS}
+                onSelectionAction={event => {
+                    if (event.actionId === DEFINE_ACTION_ID) onDefine(event.selectedText);
+                }}
                 style={styles.readiumView}
             />
 

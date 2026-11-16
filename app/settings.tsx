@@ -96,6 +96,12 @@ export default function SettingsScreen() {
                         label="Privacy Policy"
                         onPress={() => router.push('/privacy')}
                     />
+                    <View style={styles.divider} />
+                    <SettingsRow
+                        icon="menu-book"
+                        label="Dictionary"
+                        onPress={() => router.push('/dictionary-credits')}
+                    />
                 </View>
             </ScrollView>
 

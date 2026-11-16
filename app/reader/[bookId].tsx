@@ -1,16 +1,19 @@
 import { EpubNavigationBar, ReadiumReader, ReadiumReaderHandle } from '@/components/reader/ReadiumReader';
+import { DefinitionSheet } from '@/components/reader/DefinitionSheet';
 import { JumpToPageModal } from '@/components/reader/JumpToPageModal';
 import { PdfNavigation } from '@/components/reader/PdfNavigation';
 import { ReaderHeader } from '@/components/reader/ReaderHeader';
 import { Toast } from '@/components/reader/Toast';
 import { TxtNavigation } from '@/components/reader/TxtNavigation';
+import { TxtPage } from '@/components/reader/TxtPage';
 import { Colors, Spacing, TextStyles } from '@/constants';
 import { booksStorage } from '@/services';
+import { dictionary } from '@/services/dictionary';
 import { useBooksStore, useReadingStore } from '@/stores';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     AppState,
@@ -55,6 +58,8 @@ export default function ReaderScreen() {
     const [isPdfHorizontal, setIsPdfHorizontal] = useState(false);
     const [toast, setToast] = useState<ToastConfig>({ visible: false, message: '', type: 'info' });
     const [showJumpToPageModal, setShowJumpToPageModal] = useState(false);
+    const [definitionQuery, setDefinitionQuery] = useState<string | null>(null);
+    const handleDefine = useCallback((text: string) => setDefinitionQuery(text), []);
 
     // EPUB/PDF position — lifted from ReadiumReader via onPositionChange
     const [readiumPosition, setReadiumPosition] = useState(0);
@@ -148,6 +153,12 @@ export default function ReaderScreen() {
             if (navigationDebounceRef.current) clearTimeout(navigationDebounceRef.current);
         };
     }, []);
+
+    useEffect(() => {
+        if (fileType === 'unknown') return;
+        const timer = setTimeout(() => dictionary.preload().catch(console.error), 1500);
+        return () => clearTimeout(timer);
+    }, [fileType]);
 
     // Latest reading position, read by session callbacks that outlive the render
     // they were created in (AppState listener and unmount cleanup).
@@ -316,9 +327,12 @@ export default function ReaderScreen() {
                         scrollEventThrottle={16}
                         scrollEnabled={!pageTransitioning}
                     >
-                        <Text style={styles.pageText} key={`text-${currentPageIndex}`}>
-                            {pages[currentPageIndex] || 'Page not found'}
-                        </Text>
+                        <TxtPage
+                            key={`text-${currentPageIndex}`}
+                            text={pages[currentPageIndex] || 'Page not found'}
+                            style={styles.pageText}
+                            onDefine={handleDefine}
+                        />
                     </ScrollView>
                 ) : fileType === 'pdf' || fileType === 'epub' ? (
                     <ReadiumReader
@@ -334,6 +348,7 @@ export default function ReaderScreen() {
                             setReadiumTotalPositions(total);
                         }}
                         onToast={showToast}
+                        onDefine={handleDefine}
                     />
                 ) : (
                     <View style={styles.contentArea}>
@@ -381,6 +396,8 @@ export default function ReaderScreen() {
             )}
 
             <Toast visible={toast.visible} message={toast.message} type={toast.type} />
+
+            <DefinitionSheet selection={definitionQuery} onClose={() => setDefinitionQuery(null)} />
 
             <JumpToPageModal
                 visible={showJumpToPageModal}
